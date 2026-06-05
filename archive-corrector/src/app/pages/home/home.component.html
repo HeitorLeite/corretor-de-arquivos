@@ -1,0 +1,37 @@
+<div class="home-page">
+
+  <!-- Header -->
+  <div class="home-header">
+    <div class="home-header-text">
+      <h1>Ferramentas de Correção</h1>
+      <p>Selecione a ferramenta desejada para iniciar o processamento de arquivos.</p>
+    </div>
+    <div class="home-stats">
+      <div class="stat-chip">
+        <span class="stat-num">5</span>
+        <span class="stat-label">ferramentas</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-num">4</span>
+        <span class="stat-label">categorias</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grid de ferramentas -->
+  <div class="tools-grid">
+    <a class="tool-card" *ngFor="let tool of tools" [routerLink]="tool.route">
+      <div class="tool-card-top">
+        <div class="tool-icon" [innerHTML]="tool.icon"></div>
+        <span class="badge" [class]="tool.badgeClass">{{ tool.category }}</span>
+      </div>
+      <h3 class="tool-title">{{ tool.title }}</h3>
+      <p class="tool-desc">{{ tool.desc }}</p>
+      <div class="tool-footer">
+        <span class="tool-accepts">{{ tool.accepts }}</span>
+        <span class="tool-arrow">→</span>
+      </div>
+    </a>
+  </div>
+
+</div>

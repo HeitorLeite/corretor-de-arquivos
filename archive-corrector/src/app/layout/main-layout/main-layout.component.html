@@ -1,0 +1,6 @@
+<div class="layout" [class.sidebar-collapsed]="!sidebarOpen()">
+  <app-sidebar [open]="sidebarOpen()" (toggleSidebar)="toggleSidebar()"></app-sidebar>
+  <div class="main-area">
+    <router-outlet></router-outlet>
+  </div>
+</div>
