@@ -3,53 +3,88 @@
   <div class="tool-page-header">
     <span class="badge badge-xml">XML</span>
     <h1>Ferramentas XML TISS</h1>
-    <p>Corrija prefixos incorretos e remova blocos com valor zerado de arquivos XML TISS.</p>
+    <p>Processamento em lote — corrija prefixos, remova blocos zerados e normalize guias duplicadas entre arquivos.</p>
   </div>
 
   <div class="tool-page-body">
 
-    <!-- Arquivo + Opções -->
+    <!-- ── CONFIGURAÇÃO ── -->
     <div class="card">
-      <p class="section-title">Arquivo XML de entrada</p>
-      <app-file-upload accept=".xml" label="Selecionar arquivo XML" hint=".xml" (fileSelected)="onArquivo($event)" />
-
-      <div class="op-group" *ngIf="arquivo">
-        <p class="section-title" style="margin-top:20px">O que deseja fazer?</p>
-        <div class="op-options">.
-          <label class="op-card" [class.selected]="operacao === 'ambos'">
-            <input type="radio" name="op" value="ambos" [(ngModel)]="operacao" />
-            <div class="op-icon">⚡</div>
-            <span class="op-label">Ambas as correções</span>
-            <span class="op-desc">Corrige prefixos e remove blocos zerados</span>
-          </label>
-          <label class="op-card" [class.selected]="operacao === 'corretor'">
-            <input type="radio" name="op" value="corretor" [(ngModel)]="operacao" />
-            <div class="op-icon">🔧</div>
-            <span class="op-label">Corretor de Prefixo</span>
-            <span class="op-desc">Remove prefixos 18/19/20 indevidos</span>
-          </label>
-          <label class="op-card" [class.selected]="operacao === 'removedor'">
-            <input type="radio" name="op" value="removedor" [(ngModel)]="operacao" />
-            <div class="op-icon">🗑️</div>
-            <span class="op-label">Removedor de Blocos</span>
-            <span class="op-desc">Remove blocos com valorTotal = 0</span>
-          </label>
-        </div>
-
-        <div class="card-actions">
-          <button class="btn btn-primary btn-lg" [disabled]="estado() === 'analisando'" (click)="analisar()">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'analisando'">
-              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/>
-              <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-            <span *ngIf="estado() !== 'analisando'">Analisar XML</span>
-            <span *ngIf="estado() === 'analisando'">⏳ Analisando…</span>
-          </button>
-        </div>
+      <p class="section-title">O que deseja fazer?</p>
+      <div class="op-options">
+        <label class="op-card" [class.selected]="operacao === 'ambos'">
+          <input type="radio" name="op" value="ambos" [(ngModel)]="operacao" />
+          <span class="op-icon">⚡</span>
+          <span class="op-label">Todas as correções</span>
+          <span class="op-desc">Prefixos + blocos zerados + guias duplicadas</span>
+        </label>
+        <label class="op-card" [class.selected]="operacao === 'corretor'">
+          <input type="radio" name="op" value="corretor" [(ngModel)]="operacao" />
+          <span class="op-icon">🔧</span>
+          <span class="op-label">Corretor de Prefixo</span>
+          <span class="op-desc">Remove prefixos 18/19/20 indevidos</span>
+        </label>
+        <label class="op-card" [class.selected]="operacao === 'removedor'">
+          <input type="radio" name="op" value="removedor" [(ngModel)]="operacao" />
+          <span class="op-icon">🗑️</span>
+          <span class="op-label">Removedor de Blocos</span>
+          <span class="op-desc">Remove blocos com valorTotal = 0</span>
+        </label>
       </div>
     </div>
 
-    <!-- Resultado -->
+    <!-- ── UPLOAD ── -->
+    <div class="card">
+      <p class="section-title">Arquivos XML</p>
+
+      <!-- Drop zone -->
+      <div class="drop-zone" [class.drag-over]="dragOver" [class.has-files]="arquivos.length"
+           (dragover)="onDragOver($event)" (dragleave)="onDragLeave()" (drop)="onDrop($event)"
+           (click)="fileInput.click()">
+        <input #fileInput type="file" accept=".xml" multiple style="display:none" (change)="onFileInput($event)" />
+        <svg class="drop-icon" width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <path d="M28 20v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6M22 10l-6-6-6 6M16 4v16"
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="drop-label">Arraste arquivos XML aqui ou clique para selecionar</span>
+        <span class="drop-hint">Múltiplos arquivos suportados</span>
+      </div>
+
+      <!-- Lista de arquivos -->
+      <div class="file-list" *ngIf="arquivos.length">
+        <div class="file-list-header">
+          <span>{{ arquivos.length }} arquivo(s) selecionado(s)</span>
+          <button class="btn-link danger" (click)="limpar()">Limpar tudo</button>
+        </div>
+        <div class="file-item" *ngFor="let f of arquivos">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M8 1H3a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L8 1z"
+                  stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 1v5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          <span class="file-name">{{ f.name }}</span>
+          <span class="file-size">{{ formatSize(f.size) }}</span>
+          <button class="remove-btn" (click)="removerArquivo(f.name)" title="Remover">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card-actions" *ngIf="arquivos.length">
+        <button class="btn btn-primary btn-lg" [disabled]="estado() === 'analisando'" (click)="analisar()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'analisando'">
+            <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span *ngIf="estado() !== 'analisando'">Analisar {{ arquivos.length > 1 ? 'Lote' : 'XML' }}</span>
+          <span *ngIf="estado() === 'analisando'">⏳ Analisando…</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── RESUMO DO LOTE ── -->
     <ng-container *ngIf="temResultado">
 
       <!-- Tudo OK -->
@@ -58,68 +93,161 @@
           <div class="result-icon ok">
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
               <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M9 14l3.5 3.5 6.5-6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 14l3.5 3.5 6.5-6.5" stroke="currentColor" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <p>Nenhum problema encontrado. O XML está correto.</p>
+          <div>
+            <p style="font-weight:600;margin:0">Nenhum problema encontrado</p>
+            <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted)">
+              Todos os {{ resultados.length }} arquivo(s) estão corretos.
+            </p>
+          </div>
         </div>
       </div>
 
-      <!-- Há resultados -->
-      <div class="card" *ngIf="!tudoOk">
-        <div class="result-header">
-          <div class="result-badges">
-            <span class="badge-count error" *ngIf="resultCorretor && totalErros > 0">
-              <strong>{{ totalErros }}</strong> prefixo(s) incorreto(s)
-            </span>
-            <span class="badge-count warning" *ngIf="resultRemovedor && totalBlocos > 0">
-              <strong>{{ totalBlocos }}</strong> bloco(s) zerado(s)
-            </span>
+      <!-- Problemas encontrados -->
+      <ng-container *ngIf="!tudoOk">
+
+        <!-- Sumário global -->
+        <div class="card summary-card">
+          <div class="summary-grid">
+            <div class="summary-stat" [class.has-issue]="totalPrefixos > 0">
+              <span class="stat-num">{{ totalPrefixos }}</span>
+              <span class="stat-label">prefixo(s) incorreto(s)</span>
+            </div>
+            <div class="summary-stat" [class.has-issue]="totalBlocos > 0">
+              <span class="stat-num">{{ totalBlocos }}</span>
+              <span class="stat-label">bloco(s) zerado(s)</span>
+            </div>
+            <div class="summary-stat" [class.has-issue]="totalGuias > 0">
+              <span class="stat-num">{{ totalGuias }}</span>
+              <span class="stat-label">guia(s) renomeada(s)</span>
+            </div>
+            <div class="summary-stat">
+              <span class="stat-num">{{ resultados.length }}</span>
+              <span class="stat-label">arquivo(s) no lote</span>
+            </div>
           </div>
-          <button class="btn btn-primary" [disabled]="estado() === 'baixando'" (click)="corrigirEBaixar()">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-              <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            {{ estado() === 'baixando' ? 'Baixando…' : 'Corrigir e Baixar' }}
-          </button>
+          <div class="summary-actions">
+            <button class="btn btn-primary" [disabled]="estado() === 'baixando'" (click)="baixarTodos()">
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor"
+                      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              {{ estado() === 'baixando' ? 'Baixando…' : 'Baixar todos os arquivos corrigidos' }}
+            </button>
+          </div>
         </div>
 
-        <!-- Tabela Corretor -->
-        <ng-container *ngIf="resultCorretor && totalErros > 0">
-          <p class="section-title" style="margin-bottom:8px">🔧 Prefixos a corrigir</p>
-          <div class="table-wrap" style="margin-bottom:24px">
-            <table class="data-table">
-              <thead><tr><th>Posição no XML</th><th>Código original</th><th>Código corrigido</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let err of resultCorretor!.errors">
-                  <td class="mono">{{ err.position }}</td>
-                  <td><span class="tag-error">{{ err.original }}</span></td>
-                  <td><span class="tag-ok">{{ err.corrected }}</span></td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- Accordion por arquivo -->
+        <div class="arquivo-accordion" *ngFor="let r of resultados">
+          <div class="accordion-header" (click)="toggleExpand(r.nome)"
+               [class.expanded]="arquivoExpandido === r.nome">
+            <div class="accordion-left">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M8 1H3a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L8 1z"
+                      stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M8 1v5h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <span class="accordion-name">{{ r.nome }}</span>
+              <div class="accordion-badges">
+                <span class="mini-badge error" *ngIf="r.prefixos.length">{{ r.prefixos.length }} prefixo(s)</span>
+                <span class="mini-badge warning" *ngIf="r.blocos.length">{{ r.blocos.length }} bloco(s)</span>
+                <span class="mini-badge info" *ngIf="r.guiasRenomeadas.length">{{ r.guiasRenomeadas.length }} guia(s)</span>
+                <span class="mini-badge ok" *ngIf="!r.prefixos.length && !r.blocos.length && !r.guiasRenomeadas.length">OK</span>
+              </div>
+            </div>
+            <div class="accordion-right">
+              <button class="btn btn-sm" (click)="$event.stopPropagation(); baixarArquivo(r)">
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M6.5 1v7M4 5.5l2.5 2.5L9 5.5M1 11h11" stroke="currentColor"
+                        stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Baixar
+              </button>
+              <svg class="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none"
+                   [class.rotated]="arquivoExpandido === r.nome">
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </div>
           </div>
-        </ng-container>
 
-        <!-- Tabela Removedor -->
-        <ng-container *ngIf="resultRemovedor && totalBlocos > 0">
-          <p class="section-title" style="margin-bottom:8px">🗑️ Blocos zerados a remover</p>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr><th>Data execução</th><th>Tabela / Procedimento</th><th>Descrição</th><th>Valor total</th></tr></thead>
-              <tbody>
-                <tr *ngFor="let b of resultRemovedor!.blocks">
-                  <td class="mono">{{ b.dataExecucao }}</td>
-                  <td class="mono">{{ b.tabelaProcedimento }}</td>
-                  <td>{{ b.descricao }}</td>
-                  <td><span class="tag-error">{{ b.valorTotal }}</span></td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="accordion-body" *ngIf="arquivoExpandido === r.nome">
+
+            <!-- Guias renomeadas -->
+            <div class="section-block" *ngIf="r.guiasRenomeadas.length">
+              <p class="block-title">
+                <span class="mini-badge info">{{ r.guiasRenomeadas.length }}</span>
+                Guias renomeadas (duplicadas no lote)
+              </p>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Guia original</th><th>Guia renomeada</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let g of r.guiasRenomeadas">
+                      <td class="mono">{{ g.original }}</td>
+                      <td><span class="tag-ok">{{ g.novo }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Prefixos -->
+            <div class="section-block" *ngIf="r.prefixos.length">
+              <p class="block-title">
+                <span class="mini-badge error">{{ r.prefixos.length }}</span>
+                Prefixos incorretos corrigidos
+              </p>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Posição</th><th>Original</th><th>Corrigido</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let p of r.prefixos">
+                      <td class="mono">{{ p.position }}</td>
+                      <td><span class="tag-error">{{ p.original }}</span></td>
+                      <td><span class="tag-ok">{{ p.corrected }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Blocos zerados -->
+            <div class="section-block" *ngIf="r.blocos.length">
+              <p class="block-title">
+                <span class="mini-badge warning">{{ r.blocos.length }}</span>
+                Blocos zerados removidos
+              </p>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Data execução</th><th>Tabela / Procedimento</th><th>Descrição</th><th>Valor</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let b of r.blocos">
+                      <td class="mono">{{ b.dataExecucao }}</td>
+                      <td class="mono">{{ b.tabelaProcedimento }}</td>
+                      <td>{{ b.descricao }}</td>
+                      <td><span class="tag-error">{{ b.valorTotal }}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Arquivo sem problemas -->
+            <div class="no-issues" *ngIf="!r.prefixos.length && !r.blocos.length && !r.guiasRenomeadas.length">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M5 8l2.5 2.5 3.5-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Nenhum problema encontrado neste arquivo.
+            </div>
+
           </div>
-        </ng-container>
+        </div>
 
-      </div>
+      </ng-container>
     </ng-container>
 
   </div>
