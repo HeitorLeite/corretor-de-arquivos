@@ -61,24 +61,12 @@ export class HomeComponent {
     {
       category: 'XML',
       badgeClass: 'badge-xml',
-      title: 'Corretor XML TISS',
-      desc: 'Detecta e corrige procedimentos com prefixo incorreto (18, 19 ou 20) em arquivos XML TISS quando o codigoTabela é 00.',
+      title: 'Ferramentas XML',
+      desc: 'Corretor TISS e Removedor de Blocos',
       route: '/xml/corretor',
       accepts: '.xml',
       icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
         <path d="M8 6L4 11l4 5M14 6l4 5-4 5M12 4l-2 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>`,
-    },
-    {
-      category: 'XML',
-      badgeClass: 'badge-xml',
-      title: 'Removedor de Blocos',
-      desc: 'Remove blocos <ans:despesa> cujo valorTotal esteja zerado (0.00 ou 0) de arquivos XML TISS, limpando registros inválidos.',
-      route: '/xml/removedor',
-      accepts: '.xml',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M3 6h16M8 6V4h6v2M19 6l-1 13a2 2 0 01-2 2H6a2 2 0 01-2-2L3 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M9 11l4 4M13 11l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
       </svg>`,
     },
   ];
