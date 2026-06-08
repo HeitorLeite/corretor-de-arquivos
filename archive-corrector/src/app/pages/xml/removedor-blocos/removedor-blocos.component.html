@@ -1,10 +1,93 @@
 <div class="tool-page">
+
   <div class="tool-page-header">
     <span class="badge badge-xml">XML</span>
     <h1>Removedor de Blocos Zerados</h1>
-    <p>Remove blocos despesa com valorTotal zerado de arquivos XML TISS.</p>
+    <p>
+      Remove blocos <code>&lt;ans:despesa&gt;</code> cujo <code>&lt;ans:valorTotal&gt;</code>
+      esteja zerado (<code>0.00</code> ou <code>0</code>) de arquivos XML TISS.
+    </p>
   </div>
+
   <div class="tool-page-body">
-    <p style="color:var(--text-muted);font-size:13px;">🚧 Implementação na próxima etapa.</p>
+
+    <!-- Entrada -->
+    <div class="card">
+      <p class="section-title">Arquivo XML de entrada</p>
+      <app-file-upload
+        accept=".xml"
+        label="Selecionar arquivo XML"
+        hint=".xml"
+        (fileSelected)="onArquivo($event)"
+      />
+      <div class="card-actions" *ngIf="arquivo">
+        <button class="btn btn-primary btn-lg"
+                [disabled]="estado() === 'analisando'"
+                (click)="analisar()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'analisando'">
+            <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span *ngIf="estado() !== 'analisando'">Analisar XML</span>
+          <span *ngIf="estado() === 'analisando'">⏳ Analisando…</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <div class="card" *ngIf="resultado">
+
+      <!-- Sem blocos zerados -->
+      <div class="result-empty" *ngIf="semBlocos">
+        <div class="result-icon ok">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M9 14l3.5 3.5 6.5-6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p>Nenhum bloco com valor zerado encontrado.</p>
+      </div>
+
+      <!-- Com blocos -->
+      <ng-container *ngIf="!semBlocos">
+        <div class="result-header">
+          <div class="result-summary">
+            <span class="result-count">{{ resultado!.blocks.length }}</span>
+            <span>bloco(s) com valorTotal zerado encontrado(s)</span>
+          </div>
+          <button class="btn btn-danger"
+                  [disabled]="estado() === 'baixando'"
+                  (click)="removerEBaixar()">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ estado() === 'baixando' ? 'Baixando…' : 'Remover e Baixar' }}
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data execução</th>
+                <th>Tabela / Procedimento</th>
+                <th>Descrição</th>
+                <th>Valor total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let b of resultado!.blocks">
+                <td class="mono">{{ b.dataExecucao }}</td>
+                <td class="mono">{{ b.tabelaProcedimento }}</td>
+                <td>{{ b.descricao }}</td>
+                <td><span class="val-zero">{{ b.valorTotal }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </ng-container>
+
+    </div>
+
   </div>
 </div>

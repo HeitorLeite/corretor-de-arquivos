@@ -1,6 +1,6 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { NgFor, NgIf } from '@angular/common';
+import { NgFor, NgClass, NgIf } from '@angular/common';
 
 interface NavItem {
   label: string;
@@ -20,7 +20,7 @@ interface NavCategory {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, NgFor, NgIf],
+  imports: [RouterLink, RouterLinkActive, NgFor, NgClass, NgIf],
   templateUrl: './sidebar.component.html',
   styleUrls: ['./sidebar.component.scss'],
 })
