@@ -1,0 +1,4 @@
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/UnimedToolsApplication.java
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/controller/XmlController.java
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/dto/XmlAnaliseResponse.java
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/service/XmlService.java
