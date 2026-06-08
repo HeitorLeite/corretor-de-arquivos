@@ -1,0 +1,90 @@
+.op-group { margin-top: 4px; }
+
+.op-options {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.op-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  flex: 1;
+  min-width: 160px;
+  transition: border-color .15s, background .15s;
+
+  input { display: none; }
+
+  &:hover { border-color: var(--accent); }
+  &.selected {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
+.op-icon { font-size: 20px; margin-bottom: 4px; }
+.op-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.op-desc  { font-size: 12px; color: var(--text-muted); }
+
+.card-actions { display: flex; gap: 8px; }
+
+.result-empty {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.result-icon.ok { color: var(--success); }
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.result-badges { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.badge-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 20px;
+
+  strong { font-size: 16px; font-family: var(--font-mono); }
+
+  &.error   { background: var(--error-bg);   color: var(--error); }
+  &.warning { background: var(--warning-bg, #fff3cd); color: var(--warning, #856404); }
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+.mono { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+
+.tag-error {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--error-bg); color: var(--error);
+  padding: 2px 8px; border-radius: 4px;
+}
+.tag-ok {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--success-bg); color: var(--success);
+  padding: 2px 8px; border-radius: 4px;
+}

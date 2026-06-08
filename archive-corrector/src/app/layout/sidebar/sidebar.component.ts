@@ -66,8 +66,7 @@ export class SidebarComponent {
       colorClass: 'cat-xml',
       expanded: true,
       items: [
-        { label: 'Corretor XML', route: '/xml/corretor', desc: '.xml' },
-        { label: 'Removedor de Blocos', route: '/xml/removedor', desc: '.xml' },
+        { label: 'Ferramentas XML', route: '/xml/ferramentas', desc: '.xml' },
       ],
     },
   ];

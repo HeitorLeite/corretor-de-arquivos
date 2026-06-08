@@ -1,0 +1,126 @@
+<div class="tool-page">
+
+  <div class="tool-page-header">
+    <span class="badge badge-xml">XML</span>
+    <h1>Ferramentas XML TISS</h1>
+    <p>Corrija prefixos incorretos e remova blocos com valor zerado de arquivos XML TISS.</p>
+  </div>
+
+  <div class="tool-page-body">
+
+    <!-- Arquivo + Opções -->
+    <div class="card">
+      <p class="section-title">Arquivo XML de entrada</p>
+      <app-file-upload accept=".xml" label="Selecionar arquivo XML" hint=".xml" (fileSelected)="onArquivo($event)" />
+
+      <div class="op-group" *ngIf="arquivo">
+        <p class="section-title" style="margin-top:20px">O que deseja fazer?</p>
+        <div class="op-options">
+          <label class="op-card" [class.selected]="operacao === 'ambos'">
+            <input type="radio" name="op" value="ambos" [(ngModel)]="operacao" />
+            <div class="op-icon">⚡</div>
+            <span class="op-label">Ambas as correções</span>
+            <span class="op-desc">Corrige prefixos e remove blocos zerados</span>
+          </label>
+          <label class="op-card" [class.selected]="operacao === 'corretor'">
+            <input type="radio" name="op" value="corretor" [(ngModel)]="operacao" />
+            <div class="op-icon">🔧</div>
+            <span class="op-label">Corretor de Prefixo</span>
+            <span class="op-desc">Remove prefixos 18/19/20 indevidos</span>
+          </label>
+          <label class="op-card" [class.selected]="operacao === 'removedor'">
+            <input type="radio" name="op" value="removedor" [(ngModel)]="operacao" />
+            <div class="op-icon">🗑️</div>
+            <span class="op-label">Removedor de Blocos</span>
+            <span class="op-desc">Remove blocos com valorTotal = 0</span>
+          </label>
+        </div>
+
+        <div class="card-actions">
+          <button class="btn btn-primary btn-lg" [disabled]="estado() === 'analisando'" (click)="analisar()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'analisando'">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M11 11l3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <span *ngIf="estado() !== 'analisando'">Analisar XML</span>
+            <span *ngIf="estado() === 'analisando'">⏳ Analisando…</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <ng-container *ngIf="temResultado">
+
+      <!-- Tudo OK -->
+      <div class="card" *ngIf="tudoOk">
+        <div class="result-empty">
+          <div class="result-icon ok">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <circle cx="14" cy="14" r="12" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M9 14l3.5 3.5 6.5-6.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p>Nenhum problema encontrado. O XML está correto.</p>
+        </div>
+      </div>
+
+      <!-- Há resultados -->
+      <div class="card" *ngIf="!tudoOk">
+        <div class="result-header">
+          <div class="result-badges">
+            <span class="badge-count error" *ngIf="resultCorretor && totalErros > 0">
+              <strong>{{ totalErros }}</strong> prefixo(s) incorreto(s)
+            </span>
+            <span class="badge-count warning" *ngIf="resultRemovedor && totalBlocos > 0">
+              <strong>{{ totalBlocos }}</strong> bloco(s) zerado(s)
+            </span>
+          </div>
+          <button class="btn btn-primary" [disabled]="estado() === 'baixando'" (click)="corrigirEBaixar()">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+              <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ estado() === 'baixando' ? 'Baixando…' : 'Corrigir e Baixar' }}
+          </button>
+        </div>
+
+        <!-- Tabela Corretor -->
+        <ng-container *ngIf="resultCorretor && totalErros > 0">
+          <p class="section-title" style="margin-bottom:8px">🔧 Prefixos a corrigir</p>
+          <div class="table-wrap" style="margin-bottom:24px">
+            <table class="data-table">
+              <thead><tr><th>Posição no XML</th><th>Código original</th><th>Código corrigido</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let err of resultCorretor!.errors">
+                  <td class="mono">{{ err.position }}</td>
+                  <td><span class="tag-error">{{ err.original }}</span></td>
+                  <td><span class="tag-ok">{{ err.corrected }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ng-container>
+
+        <!-- Tabela Removedor -->
+        <ng-container *ngIf="resultRemovedor && totalBlocos > 0">
+          <p class="section-title" style="margin-bottom:8px">🗑️ Blocos zerados a remover</p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Data execução</th><th>Tabela / Procedimento</th><th>Descrição</th><th>Valor total</th></tr></thead>
+              <tbody>
+                <tr *ngFor="let b of resultRemovedor!.blocks">
+                  <td class="mono">{{ b.dataExecucao }}</td>
+                  <td class="mono">{{ b.tabelaProcedimento }}</td>
+                  <td>{{ b.descricao }}</td>
+                  <td><span class="tag-error">{{ b.valorTotal }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </ng-container>
+
+      </div>
+    </ng-container>
+
+  </div>
+</div>
