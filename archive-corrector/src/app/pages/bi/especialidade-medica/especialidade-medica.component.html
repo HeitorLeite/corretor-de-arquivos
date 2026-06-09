@@ -3,78 +3,157 @@
   <div class="tool-page-header">
     <span class="badge badge-bi">BI</span>
     <h1>Especialidade Médica</h1>
-    <p>
-      Preenche automaticamente a coluna <code>NOME_ESPECIALIDADE</code> na planilha de despesas
-      usando a planilha de médicos como referência e o mapa de códigos TUSS.
-    </p>
+    <p>Preenche automaticamente a coluna de especialidade nas planilhas de despesa, usando a planilha de médicos como referência.</p>
   </div>
 
   <div class="tool-page-body">
 
-    <!-- Uploads lado a lado -->
+    <!-- ── UPLOADS ── -->
     <div class="uploads-grid">
-      <div class="card">
-        <p class="section-title">Planilha de despesas</p>
-        <app-file-upload
-          accept=".xlsx"
-          label="Despesas"
-          hint=".xlsx"
-          [disabled]="estado() === 'processando'"
-          (fileSelected)="onDespesas($event)"
-        />
-        <p class="upload-note">Precisa ter as colunas: <code>NOME_ESPECIALIDADE</code>, <code>NOME_PRESTADOR_SOLIC</code></p>
+
+      <!-- Despesas -->
+      <div class="card upload-card">
+        <div class="upload-card-header">
+          <span class="upload-icon">📋</span>
+          <div>
+            <p class="upload-title">Planilha de Despesas</p>
+            <p class="upload-hint">XLSX ou CSV — aba "despesa" detectada automaticamente</p>
+          </div>
+        </div>
+
+        <ng-container *ngIf="!arquivoDespesas">
+          <div class="drop-zone" [class.drag-over]="dragOverDespesas"
+               (dragover)="onDragOverD($event)" (dragleave)="onDragLeaveD()" (drop)="onDropD($event)"
+               (click)="inputDespesas.click()">
+            <input #inputDespesas type="file" accept=".xlsx,.csv" style="display:none" (change)="onFileDespesas($event)" />
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M24 17v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5M19 9l-5-5-5 5M14 4v14"
+                    stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Arraste ou clique para selecionar</span>
+            <span class="drop-ext">.xlsx  ·  .csv</span>
+          </div>
+        </ng-container>
+
+        <div class="file-selected" *ngIf="arquivoDespesas">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V7L9 1z"
+                  stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 1v6h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          <div class="file-info">
+            <span class="file-name">{{ arquivoDespesas.name }}</span>
+            <span class="file-size">{{ formatSize(arquivoDespesas.size) }}</span>
+          </div>
+          <button class="remove-btn" (click)="removerDespesas()" title="Remover">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <div class="card">
-        <p class="section-title">Planilha de médicos (referência)</p>
-        <app-file-upload
-          accept=".xlsx"
-          label="Médicos"
-          hint=".xlsx"
-          [disabled]="estado() === 'processando'"
-          (fileSelected)="onMedicos($event)"
-        />
-        <p class="upload-note">Precisa ter as colunas: <code>PES_NOM_COMP</code>, <code>ESPMD_DES</code></p>
+      <!-- Médicos -->
+      <div class="card upload-card">
+        <div class="upload-card-header">
+          <span class="upload-icon">👨‍⚕️</span>
+          <div>
+            <p class="upload-title">Planilha de Médicos</p>
+            <p class="upload-hint">XLSX — colunas: PES_NOM_COMP e ESPMD_DES</p>
+          </div>
+        </div>
+
+        <ng-container *ngIf="!arquivoMedicos">
+          <div class="drop-zone" [class.drag-over]="dragOverMedicos"
+               (dragover)="onDragOverM($event)" (dragleave)="onDragLeaveM()" (drop)="onDropM($event)"
+               (click)="inputMedicos.click()">
+            <input #inputMedicos type="file" accept=".xlsx" style="display:none" (change)="onFileMedicos($event)" />
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M24 17v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5M19 9l-5-5-5 5M14 4v14"
+                    stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Arraste ou clique para selecionar</span>
+            <span class="drop-ext">.xlsx</span>
+          </div>
+        </ng-container>
+
+        <div class="file-selected" *ngIf="arquivoMedicos">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V7L9 1z"
+                  stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 1v6h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          <div class="file-info">
+            <span class="file-name">{{ arquivoMedicos.name }}</span>
+            <span class="file-size">{{ formatSize(arquivoMedicos.size) }}</span>
+          </div>
+          <button class="remove-btn" (click)="removerMedicos()" title="Remover">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Ação -->
-    <div class="card" *ngIf="pronto || estado() === 'processando'">
-      <button class="btn btn-primary btn-lg"
-              [disabled]="estado() === 'processando'"
-              (click)="processar()">
+    <!-- ── AÇÃO ── -->
+    <div class="card action-card" *ngIf="pronto || estado() === 'sucesso'">
+      <button class="btn btn-primary btn-lg" [disabled]="!pronto || estado() === 'processando'" (click)="processar()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'processando'">
-          <path d="M8 2v9M4.5 8L8 11.5 11.5 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <polygon points="4,2 14,8 4,14" fill="currentColor"/>
         </svg>
-        <span *ngIf="estado() !== 'processando'">Processar e preencher especialidades</span>
+        <span *ngIf="estado() !== 'processando'">Processar Especialidades</span>
         <span *ngIf="estado() === 'processando'">⏳ Processando…</span>
+      </button>
+
+      <button class="btn btn-success btn-lg" *ngIf="estado() === 'sucesso'" (click)="baixar()">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+          <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor"
+                stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Baixar arquivo preenchido
       </button>
     </div>
 
-    <!-- Log -->
-    <div class="card" *ngIf="log().length > 0">
-      <p class="section-title">Log</p>
-      <div class="log-terminal">
-        <div *ngFor="let e of log()" [class]="'log-' + e.tipo">{{ e.msg }}</div>
-      </div>
-      <div class="download-row" *ngIf="estado() === 'sucesso'">
-        <button class="btn btn-primary btn-lg" (click)="baixar()">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2v9M4.5 8L8 11.5 11.5 8M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Baixar planilha preenchida
-        </button>
-        <span class="download-name">{{ downloadNome }}</span>
+    <!-- ── STATS ── -->
+    <div class="card stats-card" *ngIf="stats() as s">
+      <p class="section-title">Resultado do processamento — aba "{{ s.aba }}"</p>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-num">{{ s.total }}</span>
+          <span class="stat-label">Total de linhas</span>
+        </div>
+        <div class="stat-box success">
+          <span class="stat-num">{{ s.preenchidas }}</span>
+          <span class="stat-label">Preenchidas agora</span>
+        </div>
+        <div class="stat-box accent">
+          <span class="stat-num">{{ s.jaOk }}</span>
+          <span class="stat-label">Já preenchidas</span>
+        </div>
+        <div class="stat-box" [class.warning]="s.semInfo > 0">
+          <span class="stat-num">{{ s.semInfo }}</span>
+          <span class="stat-label">Sem informação</span>
+        </div>
       </div>
     </div>
 
-    <div class="backend-notice" *ngIf="estado() === 'idle' || estado() === 'pronto'">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/>
-        <path d="M8 5v4M8 11v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      Esta ferramenta requer o backend Spring Boot rodando em <code>localhost:8080</code>.
+    <!-- ── LOG ── -->
+    <div class="card log-card" *ngIf="logs().length > 0">
+      <div class="log-header">
+        <span class="section-title" style="margin:0">Log de execução</span>
+      </div>
+      <div class="log-box" #logBox>
+        <div *ngFor="let l of logs()" class="log-line" [ngClass]="'log-' + l.tipo">
+          <span *ngIf="l.tipo === 'section'" class="log-sep">{{ l.msg }}</span>
+          <span *ngIf="l.tipo !== 'section'">
+            <span class="log-prefix" [ngClass]="'pfx-' + l.tipo">
+              {{ l.tipo === 'ok' ? '✓' : l.tipo === 'error' ? '✗' : l.tipo === 'warn' ? '⚠' : '·' }}
+            </span>
+            {{ l.msg }}
+          </span>
+        </div>
+      </div>
     </div>
 
   </div>
