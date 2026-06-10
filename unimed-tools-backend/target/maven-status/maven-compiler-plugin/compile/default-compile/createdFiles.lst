@@ -1,11 +1,13 @@
 com/unimedlorena/tools/service/EspecialidadeService$1.class
-com/unimedlorena/tools/dto/EspecialidadeStats.class
 com/unimedlorena/tools/controller/EspecialidadeController.class
-com/unimedlorena/tools/service/EspecialidadeService.class
 com/unimedlorena/tools/service/XmlService.class
-com/unimedlorena/tools/dto/XmlAnaliseResponse$BlocoZerado.class
 com/unimedlorena/tools/dto/XmlAnaliseResponse$PrefixoErro.class
+com/unimedlorena/tools/CorsConfig.class
+com/unimedlorena/tools/UnimedToolsApplication.class
+com/unimedlorena/tools/GlobalExceptionHandler.class
+com/unimedlorena/tools/dto/EspecialidadeStats.class
+com/unimedlorena/tools/service/EspecialidadeService.class
+com/unimedlorena/tools/dto/XmlAnaliseResponse$BlocoZerado.class
 com/unimedlorena/tools/dto/XmlAnaliseResponse.class
 com/unimedlorena/tools/controller/XmlController.class
 com/unimedlorena/tools/service/EspecialidadeService$Resultado.class
-com/unimedlorena/tools/UnimedToolsApplication.class

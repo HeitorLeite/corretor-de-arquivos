@@ -29,7 +29,6 @@ export class EspecialidadeMedicaComponent {
 
   constructor(private api: ApiService) {}
 
-  // ── Estado ──────────────────────────────────────────────────────────────────
   get pronto(): boolean { return !!this.arquivoDespesas && !!this.arquivoMedicos; }
 
   reset() {
@@ -46,51 +45,41 @@ export class EspecialidadeMedicaComponent {
     }, 30);
   }
 
-  // ── Upload Despesas ──────────────────────────────────────────────────────────
   onDragOverD(e: DragEvent) { e.preventDefault(); this.dragOverDespesas = true; }
   onDragLeaveD() { this.dragOverDespesas = false; }
   onDropD(e: DragEvent) {
     e.preventDefault(); this.dragOverDespesas = false;
     const f = e.dataTransfer?.files[0];
-    if (f && this.validarArquivo(f)) { this.arquivoDespesas = f; this.reset(); }
+    if (f && this.validar(f)) { this.arquivoDespesas = f; this.reset(); }
   }
   onFileDespesas(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
-    if (f && this.validarArquivo(f)) { this.arquivoDespesas = f; this.reset(); }
+    if (f && this.validar(f)) { this.arquivoDespesas = f; this.reset(); }
     (e.target as HTMLInputElement).value = '';
   }
 
-  // ── Upload Médicos ───────────────────────────────────────────────────────────
   onDragOverM(e: DragEvent) { e.preventDefault(); this.dragOverMedicos = true; }
   onDragLeaveM() { this.dragOverMedicos = false; }
   onDropM(e: DragEvent) {
     e.preventDefault(); this.dragOverMedicos = false;
     const f = e.dataTransfer?.files[0];
-    if (f && this.validarArquivo(f, true)) { this.arquivoMedicos = f; this.reset(); }
+    if (f && f.name.endsWith('.xlsx')) { this.arquivoMedicos = f; this.reset(); }
   }
   onFileMedicos(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
-    if (f && this.validarArquivo(f, true)) { this.arquivoMedicos = f; this.reset(); }
+    if (f && f.name.endsWith('.xlsx')) { this.arquivoMedicos = f; this.reset(); }
     (e.target as HTMLInputElement).value = '';
   }
 
-  validarArquivo(f: File, soXlsx = false): boolean {
-    const ok = soXlsx
-      ? f.name.endsWith('.xlsx')
-      : f.name.endsWith('.xlsx') || f.name.endsWith('.csv');
-    return ok;
-  }
-
+  validar(f: File): boolean { return f.name.endsWith('.xlsx') || f.name.endsWith('.csv'); }
   removerDespesas() { this.arquivoDespesas = null; this.reset(); }
   removerMedicos()  { this.arquivoMedicos = null;  this.reset(); }
-
   formatSize(b: number) {
     if (b < 1024) return b + ' B';
-    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-    return (b / 1048576).toFixed(1) + ' MB';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
   }
 
-  // ── Processamento ────────────────────────────────────────────────────────────
   processar() {
     if (!this.pronto) return;
     this.estado.set('processando');
@@ -106,12 +95,11 @@ export class EspecialidadeMedicaComponent {
 
     this.api.upload('bi/especialidade', form).subscribe({
       next: (event: any) => {
-        if (event.type === HttpEventType.UploadProgress) {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
           const pct = Math.round(100 * event.loaded / event.total);
           if (pct === 100) this.addLog('Upload concluído. Processando no servidor…', 'info');
         }
         if (event.type === HttpEventType.Response) {
-          // Lê o cabeçalho de estatísticas
           const statsHeader = event.headers?.get('X-Stats');
           if (statsHeader) {
             try { this.stats.set(JSON.parse(statsHeader)); } catch {}
@@ -125,17 +113,28 @@ export class EspecialidadeMedicaComponent {
             this.addLog('══ Resultado ══', 'section');
             this.addLog(`Aba processada: "${s.aba}"`, 'ok');
             this.addLog(`Total de linhas: ${s.total}`, 'info');
-            this.addLog(`Especialidades preenchidas agora: ${s.preenchidas}`, 'ok');
+            this.addLog(`Preenchidas agora: ${s.preenchidas}`, 'ok');
             this.addLog(`Já preenchidas: ${s.jaOk}`, 'info');
-            this.addLog(`Sem informação suficiente: ${s.semInfo}`, s.semInfo > 0 ? 'warn' : 'info');
+            this.addLog(`Sem informação: ${s.semInfo}`, s.semInfo > 0 ? 'warn' : 'info');
           }
           this.addLog('Arquivo pronto para download!', 'ok');
           this.estado.set('sucesso');
         }
       },
-      error: (err) => {
-        const msg = err?.error?.message ?? 'Erro ao processar. Verifique o backend (localhost:8080).';
+      error: async (err) => {
+        // Tenta ler a mensagem real do backend
+        let msg = 'Erro ao conectar com o backend (localhost:8080).';
+        try {
+          if (err.error instanceof Blob) {
+            const text = await err.error.text();
+            const parsed = JSON.parse(text);
+            msg = parsed.message ?? msg;
+          } else if (err.error?.message) {
+            msg = err.error.message;
+          }
+        } catch {}
         this.addLog(msg, 'error');
+        this.addLog('Verifique o terminal do backend para o stack trace completo.', 'warn');
         this.estado.set('erro');
       }
     });

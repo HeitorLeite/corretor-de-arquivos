@@ -1,3 +1,5 @@
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/CorsConfig.java
+/workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/GlobalExceptionHandler.java
 /workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/UnimedToolsApplication.java
 /workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/controller/EspecialidadeController.java
 /workspaces/corretor-de-arquivos/unimed-tools-backend/src/main/java/com/unimedlorena/tools/controller/XmlController.java
