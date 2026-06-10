@@ -48,6 +48,11 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <mainClass>com.unimedlorena.tools.UnimedToolsApplication</mainClass>
+          <start-class>com.unimedlorena.tools.UnimedToolsApplication</start-class>
+          <optimizedLaunch>false</optimizedLaunch>
+        </configuration>
       </plugin>
     </plugins>
   </build>
