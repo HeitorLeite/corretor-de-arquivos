@@ -1,0 +1,132 @@
+<div class="tool-page">
+
+  <div class="tool-page-header">
+    <span class="badge badge-ans">ANS</span>
+    <h1>Corretor de Rede</h1>
+    <p>
+      Filtra linhas de um arquivo TXT posicional com base em erros de CNES, CNPJ/CPF,
+      Município, Prestador (8521) ou Aviso, usando planilha XLSX multi-abas ou CSVs individuais.
+    </p>
+  </div>
+
+  <div class="tool-page-body">
+
+    <!-- TXT -->
+    <div class="card">
+      <p class="section-title">Arquivo TXT de rede (entrada)</p>
+      <app-file-upload
+        accept=".txt"
+        label="Arquivo TXT posicional"
+        hint=".txt"
+        [disabled]="estado() === 'processando'"
+        (fileSelected)="onTxt($event)"
+      />
+    </div>
+
+    <!-- Modo de erros -->
+    <div class="card">
+      <p class="section-title">Fonte dos erros</p>
+      <div class="mode-tabs">
+        <button class="mode-tab" [class.active]="modo === 'xlsx'" (click)="setModo('xlsx')">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <rect x="1" y="1" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M4 4h7M4 7.5h7M4 11h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          Planilha XLSX (multi-abas)
+        </button>
+        <button class="mode-tab" [class.active]="modo === 'csv'" (click)="setModo('csv')">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <path d="M2 2h11v11H2z" stroke="currentColor" stroke-width="1.2" rx="2"/>
+            <path d="M2 5h11M5 5v8" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+          CSVs individuais por tipo
+        </button>
+      </div>
+
+      <!-- Modo XLSX -->
+      <div class="mode-content" *ngIf="modo === 'xlsx'">
+        <p class="mode-desc">
+          Selecione um arquivo <code>.xlsx</code> com abas nomeadas como:
+          <code>ECnes</code>, <code>CNES</code>, <code>Municpio</code>, <code>Prestador</code>, <code>Aviso</code>
+          ou <code>erros_*</code>.
+        </p>
+        <app-file-upload
+          accept=".xlsx"
+          label="Planilha de erros (XLSX)"
+          hint=".xlsx"
+          [disabled]="estado() === 'processando'"
+          (fileSelected)="onXlsx($event)"
+        />
+      </div>
+
+      <!-- Modo CSV -->
+      <div class="mode-content" *ngIf="modo === 'csv'">
+        <p class="mode-desc">Selecione apenas os CSVs que desejar aplicar. Todos são opcionais.</p>
+        <div class="csv-grid">
+          <div class="csv-item">
+            <span class="csv-label">ECnes</span>
+            <app-file-upload accept=".csv" label="ECnes" hint=".csv" [disabled]="estado() === 'processando'" (fileSelected)="onCsvEcnes($event)"/>
+          </div>
+          <div class="csv-item">
+            <span class="csv-label">CNES</span>
+            <app-file-upload accept=".csv" label="CNES" hint=".csv" [disabled]="estado() === 'processando'" (fileSelected)="onCsvCnes($event)"/>
+          </div>
+          <div class="csv-item">
+            <span class="csv-label">Município</span>
+            <app-file-upload accept=".csv" label="Município" hint=".csv" [disabled]="estado() === 'processando'" (fileSelected)="onCsvMunicipio($event)"/>
+          </div>
+          <div class="csv-item">
+            <span class="csv-label">Prestador</span>
+            <app-file-upload accept=".csv" label="Prestador" hint=".csv" [disabled]="estado() === 'processando'" (fileSelected)="onCsvPrestador($event)"/>
+          </div>
+          <div class="csv-item">
+            <span class="csv-label">Aviso</span>
+            <app-file-upload accept=".csv" label="Aviso" hint=".csv" [disabled]="estado() === 'processando'" (fileSelected)="onCsvAviso($event)"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Executar -->
+    <div class="card" *ngIf="pronto || estado() === 'processando'">
+      <button class="btn btn-primary btn-lg"
+              [disabled]="estado() === 'processando'"
+              (click)="executar()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" *ngIf="estado() !== 'processando'">
+          <path d="M5 3l8 5-8 5V3z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span *ngIf="estado() !== 'processando'">Executar filtro</span>
+        <span *ngIf="estado() === 'processando'">⏳ Processando…</span>
+      </button>
+      <div class="progress-bar" *ngIf="estado() === 'processando'">
+        <div class="progress-fill" [style.width.%]="progresso()"></div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card" *ngIf="log().length > 0">
+      <p class="section-title">Log</p>
+      <div class="log-terminal">
+        <div *ngFor="let e of log()" [class]="'log-' + e.tipo">{{ e.msg }}</div>
+      </div>
+      <div class="download-row" *ngIf="estado() === 'sucesso'">
+        <button class="btn btn-primary btn-lg" (click)="baixar()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v9M4.5 8L8 11.5 11.5 8M2 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Baixar TXT filtrado
+        </button>
+        <span class="download-name">{{ downloadNome }}</span>
+      </div>
+    </div>
+
+    <div class="backend-notice" *ngIf="estado() === 'idle' || estado() === 'pronto'">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M8 5v4M8 11v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Esta ferramenta requer o backend Spring Boot rodando em <code>localhost:8080</code>.
+    </div>
+
+  </div>
+</div>

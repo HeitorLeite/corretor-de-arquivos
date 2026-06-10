@@ -1,0 +1,113 @@
+.upload-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 1.5px dashed var(--surface-border);
+  border-radius: var(--radius-md);
+  background: var(--content-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 68px;
+
+  &:hover:not(.disabled) {
+    border-color: var(--brand-green);
+    background: #f0faf4;
+  }
+
+  &.drag-over {
+    border-color: var(--brand-green);
+    background: #e6f4ed;
+    border-style: solid;
+  }
+
+  &.has-file {
+    border-style: solid;
+    border-color: var(--brand-green);
+    background: #f0faf4;
+    cursor: default;
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.upload-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  display: flex;
+}
+
+.upload-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.upload-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.upload-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.upload-hint {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--surface-border);
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.file-check {
+  flex-shrink: 0;
+  color: var(--brand-green);
+  display: flex;
+}
+
+.file-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.clear-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover { color: var(--error); background: var(--error-bg); }
+}
