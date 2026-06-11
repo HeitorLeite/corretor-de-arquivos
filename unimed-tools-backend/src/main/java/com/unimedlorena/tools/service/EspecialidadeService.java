@@ -12,6 +12,7 @@ import java.util.*;
 @Service
 public class EspecialidadeService {
 
+    // ── Tabela TUSS fixa (mesma do Python) ─────────────────────────────────────
     private static final Map<String, String> TUSS_MAP = Map.of(
         "10101039", "CLÍNICA MÉDICA",
         "50000349", "FISIOTERAPIA",
@@ -28,10 +29,13 @@ public class EspecialidadeService {
 
     public Resultado processar(MultipartFile fileDespesas, MultipartFile fileMedicos) throws Exception {
 
+        // 1. Carrega mapa de médicos ─────────────────────────────────────────────
         Map<String, String> mapaMedicos = carregarMedicos(fileMedicos);
 
+        // 2. Abre despesas ────────────────────────────────────────────────────────
         Workbook wb = new XSSFWorkbook(fileDespesas.getInputStream());
 
+        // Detecta aba "despesa"
         Sheet ws = null;
         String nomeAba = null;
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
@@ -40,6 +44,7 @@ public class EspecialidadeService {
         }
         if (ws == null) { ws = wb.getSheetAt(0); nomeAba = wb.getSheetName(0); }
 
+        // 3. Mapeia colunas pelo cabeçalho ────────────────────────────────────────
         Row header = ws.getRow(0);
         int colEsp = -1, colSol = -1, colTuss = -1;
 
@@ -53,6 +58,7 @@ public class EspecialidadeService {
         if (colEsp < 0)  throw new IllegalArgumentException("Coluna 'Nome Especialidade' não encontrada.");
         if (colSol < 0)  throw new IllegalArgumentException("Coluna 'Nome Solicitante' não encontrada.");
 
+        // 4. Processa linhas ──────────────────────────────────────────────────────
         int total = 0, preenchidas = 0, jaOk = 0, semInfo = 0;
 
         for (int r = 1; r <= ws.getLastRowNum(); r++) {
@@ -66,8 +72,10 @@ public class EspecialidadeService {
             String solicitante = cellStr(row.getCell(colSol));
             String tuss        = colTuss >= 0 ? cellStr(row.getCell(colTuss)) : "";
 
+            // Ambos vazios
             if (vazio(solicitante) && vazio(tuss)) { semInfo++; continue; }
 
+            // Fallback TUSS
             if (vazio(solicitante) && !vazio(tuss)) {
                 String esp = TUSS_MAP.get(tuss.trim());
                 if (esp != null) { setCelula(row, colEsp, esp, wb); preenchidas++; }
@@ -75,11 +83,13 @@ public class EspecialidadeService {
                 continue;
             }
 
+            // Busca na referência
             String esp = mapaMedicos.get(solicitante.trim().toUpperCase());
             if (esp != null) { setCelula(row, colEsp, esp, wb); preenchidas++; }
             else semInfo++;
         }
 
+        // 5. Serializa ────────────────────────────────────────────────────────────
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         wb.write(out);
         wb.close();
@@ -88,6 +98,7 @@ public class EspecialidadeService {
             new EspecialidadeStats(total, preenchidas, jaOk, semInfo, nomeAba));
     }
 
+    // ── Carrega planilha de médicos ─────────────────────────────────────────────
     private Map<String, String> carregarMedicos(MultipartFile file) throws Exception {
         Map<String, String> mapa = new HashMap<>();
         Workbook wb = new XSSFWorkbook(file.getInputStream());
@@ -115,6 +126,7 @@ public class EspecialidadeService {
         return mapa;
     }
 
+    // ── Utilitários ─────────────────────────────────────────────────────────────
     private String cellStr(Cell c) {
         if (c == null) return "";
         return switch (c.getCellType()) {

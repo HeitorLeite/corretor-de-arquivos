@@ -75,7 +75,7 @@ export class HomeComponent {
       route: '/ans/corretor-rede',
       badgeClass: 'badge-ans',
       accepts: '.txt + .xlsx',
-      ready: false,
+      ready: true,
       icon: `<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
         <rect x="3" y="3" width="22" height="22" rx="4" stroke="currentColor" stroke-width="1.5"/>
         <path d="M7 10h14M7 14h9M7 18h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

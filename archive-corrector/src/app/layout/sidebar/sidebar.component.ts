@@ -25,6 +25,6 @@ export class SidebarComponent {
     { label: 'XML',        tag: 'TISS',                  badgeClass: 'cat-xml',        route: '/xml/ferramentas',       ready: true  },
     { label: 'BI',         tag: 'Business Intelligence',  badgeClass: 'cat-bi',         route: '/bi/especialidade-medica', ready: true },
     { label: 'Fechamento', tag: 'Produção',               badgeClass: 'cat-fechamento', route: '/fechamento/corretor',   ready: false },
-    { label: 'ANS',        tag: 'Agência Nac. Saúde',     badgeClass: 'cat-ans',        route: '/ans/corretor-rede',     ready: false },
+    { label: 'ANS', tag: 'Agência Nac. Saúde', badgeClass: 'cat-ans', route: '/ans/corretor-rede', ready: true },
   ];
 }
