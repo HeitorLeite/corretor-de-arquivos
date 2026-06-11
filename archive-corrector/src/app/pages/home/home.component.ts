@@ -1,85 +1,89 @@
 import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { NgFor } from '@angular/common';
 
-interface Tool {
-  title: string;
+interface Category {
+  id: string;
+  label: string;
+  tag: string;
   desc: string;
   route: string;
-  category: string;
   badgeClass: string;
   accepts: string;
   icon: string;
+  ready: boolean;
 }
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, NgFor],
+  imports: [NgFor],
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.scss'],
 })
 export class HomeComponent {
-  tools: Tool[] = [
+  constructor(private router: Router) {}
+
+  categories: Category[] = [
     {
-      category: 'ANS',
-      badgeClass: 'badge-ans',
-      title: 'Corretor de Rede',
-      desc: 'Filtra arquivos TXT posicionais com base em erros de CNES, CNPJ, Município, Prestador ou Aviso a partir de planilha XLSX ou CSVs individuais.',
-      route: '/ans/corretor-rede',
-      accepts: '.txt + .xlsx / .csv',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="2" y="2" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.4"/>
-        <path d="M6 8h10M6 11h7M6 14h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      id: 'xml',
+      label: 'XML',
+      tag: 'TISS',
+      desc: 'Corrige prefixos incorretos e remove blocos com valorTotal zerado em arquivos XML TISS. Suporta processamento em lote com detecção de guias duplicadas.',
+      route: '/xml/ferramentas',
+      badgeClass: 'badge-xml',
+      accepts: '.xml',
+      ready: true,
+      icon: `<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <path d="M10 8L5 14l5 6M18 8l5 6-5 6M15 5l-3 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>`,
     },
     {
-      category: 'BI',
-      badgeClass: 'badge-bi',
-      title: 'Especialidade Médica',
-      desc: 'Preenche automaticamente a coluna de especialidade médica em planilhas de despesas, usando tabela de referência de médicos e mapa TUSS.',
+      id: 'bi',
+      label: 'BI',
+      tag: 'Business Intelligence',
+      desc: 'Preenche automaticamente a coluna de especialidade médica em planilhas de despesas usando planilha de médicos como referência e mapa TUSS.',
       route: '/bi/especialidade-medica',
-      accepts: '.xlsx (despesas + médicos)',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M11 3v16M3 11h16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-        <rect x="2" y="2" width="18" height="18" rx="4" stroke="currentColor" stroke-width="1.4"/>
+      badgeClass: 'badge-bi',
+      accepts: '.xlsx / .csv',
+      ready: true,
+      icon: `<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <rect x="3" y="3" width="22" height="22" rx="4" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M8 18v-4M13 18v-8M18 18v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>`,
     },
     {
-      category: 'Fechamento',
-      badgeClass: 'badge-fech',
-      title: 'Corretor de Fechamento',
-      desc: 'Converte a planilha de Eventos para Fechamento da Produção dos Prestadores (Excel) para o formato CSV esperado pelo sistema.',
+      id: 'fechamento',
+      label: 'Fechamento',
+      tag: 'Produção',
+      desc: 'Converte a planilha de Eventos para Fechamento da Produção dos Prestadores para o formato CSV esperado pelo sistema.',
       route: '/fechamento/corretor',
+      badgeClass: 'badge-fech',
       accepts: '.xlsx → .csv',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M4 4h9l5 5v9a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z" stroke="currentColor" stroke-width="1.4"/>
-        <path d="M13 4v5h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-        <path d="M7 13h8M7 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      ready: false,
+      icon: `<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <path d="M5 5h12l6 6v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M17 5v6h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M8 16h12M8 20h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>`,
     },
     {
-      category: 'XML',
-      badgeClass: 'badge-xml',
-      title: 'Corretor XML TISS',
-      desc: 'Detecta e corrige procedimentos com prefixo incorreto (18, 19 ou 20) em arquivos XML TISS quando o codigoTabela é 00.',
-      route: '/xml/corretor',
-      accepts: '.xml',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M8 6L4 11l4 5M14 6l4 5-4 5M12 4l-2 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>`,
-    },
-    {
-      category: 'XML',
-      badgeClass: 'badge-xml',
-      title: 'Removedor de Blocos',
-      desc: 'Remove blocos <ans:despesa> cujo valorTotal esteja zerado (0.00 ou 0) de arquivos XML TISS, limpando registros inválidos.',
-      route: '/xml/removedor',
-      accepts: '.xml',
-      icon: `<svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <path d="M3 6h16M8 6V4h6v2M19 6l-1 13a2 2 0 01-2 2H6a2 2 0 01-2-2L3 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M9 11l4 4M13 11l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      id: 'ans',
+      label: 'ANS',
+      tag: 'Agência Nac. Saúde',
+      desc: 'Filtra arquivos TXT posicionais com base em erros de CNES, CNPJ, Município, Prestador ou Aviso a partir de planilha de referência.',
+      route: '/ans/corretor-rede',
+      badgeClass: 'badge-ans',
+      accepts: '.txt + .xlsx',
+      ready: false,
+      icon: `<svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <rect x="3" y="3" width="22" height="22" rx="4" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M7 10h14M7 14h9M7 18h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>`,
     },
   ];
+
+  navigate(cat: Category) {
+    if (cat.ready) this.router.navigate([cat.route]);
+  }
 }

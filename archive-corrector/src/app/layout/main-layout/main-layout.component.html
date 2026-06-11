@@ -1,5 +1,8 @@
-<div class="layout" [class.sidebar-collapsed]="!sidebarOpen()">
-  <app-sidebar [open]="sidebarOpen()" (toggleSidebar)="toggleSidebar()" />
+<div class="layout" [class.sidebar-collapsed]="!sidebarOpen()" [class.no-sidebar]="isHome()">
+  <app-sidebar
+    *ngIf="!isHome()"
+    [open]="sidebarOpen()"
+    (toggleSidebar)="toggleSidebar()" />
   <div class="main-area">
     <router-outlet />
   </div>

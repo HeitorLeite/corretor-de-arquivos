@@ -2,36 +2,49 @@
 
   <!-- Header -->
   <div class="home-header">
-    <div class="home-header-text">
-      <h1>Ferramentas de Correção</h1>
-      <p>Selecione a ferramenta desejada para iniciar o processamento de arquivos.</p>
+    <div class="home-logo">
+      <span>U</span>
     </div>
-    <div class="home-stats">
-      <div class="stat-chip">
-        <span class="stat-num">5</span>
-        <span class="stat-label">ferramentas</span>
-      </div>
-      <div class="stat-chip">
-        <span class="stat-num">4</span>
-        <span class="stat-label">categorias</span>
-      </div>
+    <div class="home-header-text">
+      <h1>Unimed Tools</h1>
+      <p>Ferramentas internas de correção e validação de arquivos</p>
     </div>
   </div>
 
-  <!-- Grid de ferramentas -->
-  <div class="tools-grid">
-    <a class="tool-card" *ngFor="let tool of tools" [routerLink]="tool.route">
-      <div class="tool-card-top">
-        <div class="tool-icon" [innerHTML]="tool.icon"></div>
-        <span class="badge" [class]="tool.badgeClass">{{ tool.category }}</span>
+  <div class="categories-grid">
+    <div
+      class="cat-card"
+      *ngFor="let cat of categories"
+      [class.cat-disabled]="!cat.ready"
+      (click)="navigate(cat)">
+
+      <div class="cat-card-top">
+        <div class="cat-icon" [innerHTML]="cat.icon"></div>
+        <div class="cat-badges">
+          <span class="badge" [class]="cat.badgeClass">{{ cat.label }}</span>
+          <span class="badge-coming" *ngIf="!cat.ready">Em breve</span>
+        </div>
       </div>
-      <h3 class="tool-title">{{ tool.title }}</h3>
-      <p class="tool-desc">{{ tool.desc }}</p>
-      <div class="tool-footer">
-        <span class="tool-accepts">{{ tool.accepts }}</span>
-        <span class="tool-arrow">→</span>
+
+      <div class="cat-card-body">
+        <h3 class="cat-title">{{ cat.tag }}</h3>
+        <p class="cat-desc">{{ cat.desc }}</p>
       </div>
-    </a>
+
+      <div class="cat-card-footer">
+        <span class="cat-accepts">{{ cat.accepts }}</span>
+        <span class="cat-arrow" *ngIf="cat.ready">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="home-footer">
+    <span>Unimed Lorena · Heitor Leite · 2026</span>
   </div>
 
 </div>
