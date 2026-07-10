@@ -24,12 +24,20 @@ export class XmlToolsComponent {
   constructor(private xmlSvc: XmlService) {}
 
   // ── Upload ──────────────────────────────────────────────────────────────────
-  onDragOver(e: DragEvent) { e.preventDefault(); this.dragOver = true; }
-  onDragLeave() { this.dragOver = false; }
+  onDragOver(e: DragEvent) {
+    e.preventDefault();
+    this.dragOver = true;
+  }
+
+  onDragLeave() {
+    this.dragOver = false;
+  }
 
   onDrop(e: DragEvent) {
-    e.preventDefault(); this.dragOver = false;
-    const dropped = Array.from(e.dataTransfer?.files ?? []).filter(f => f.name.endsWith('.xml'));
+    e.preventDefault();
+    this.dragOver = false;
+    const dropped = Array.from(e.dataTransfer?.files ?? [])
+      .filter(f => f.name.endsWith('.xml'));
     this.adicionarArquivos(dropped);
   }
 
@@ -41,7 +49,10 @@ export class XmlToolsComponent {
 
   adicionarArquivos(novos: File[]) {
     const existentes = new Set(this.arquivos.map(f => f.name));
-    this.arquivos = [...this.arquivos, ...novos.filter(f => !existentes.has(f.name))];
+    this.arquivos = [
+      ...this.arquivos,
+      ...novos.filter(f => !existentes.has(f.name)),
+    ];
     this.resultados = [];
     this.estado.set(this.arquivos.length > 0 ? 'pronto' : 'idle');
   }
@@ -52,12 +63,17 @@ export class XmlToolsComponent {
     this.estado.set(this.arquivos.length > 0 ? 'pronto' : 'idle');
   }
 
-  limpar() { this.arquivos = []; this.resultados = []; this.estado.set('idle'); }
+  limpar() {
+    this.arquivos = [];
+    this.resultados = [];
+    this.estado.set('idle');
+  }
 
   // ── Análise + Correção ──────────────────────────────────────────────────────
   async analisar() {
     if (!this.arquivos.length) return;
     this.estado.set('analisando');
+
     try {
       this.resultados = await this.xmlSvc.processarLote(
         this.arquivos,
@@ -65,21 +81,31 @@ export class XmlToolsComponent {
         this.operacao !== 'corretor'
       );
       this.estado.set('resultado');
-      if (this.resultados.length === 1) this.arquivoExpandido = this.resultados[0].nome;
-    } catch { this.estado.set('pronto'); }
+
+      if (this.resultados.length === 1) {
+        this.arquivoExpandido = this.resultados[0].nome;
+      }
+    } catch {
+      this.estado.set('pronto');
+    }
   }
 
   baixarTodos() {
     this.estado.set('baixando');
+
     for (const r of this.resultados) {
       const nome = r.nome.replace('.xml', '_corrigido.xml');
       this.xmlSvc.downloadXml(r.correctedContent, nome);
     }
+
     setTimeout(() => this.estado.set('resultado'), 800);
   }
 
   baixarArquivo(r: ArquivoResultado) {
-    this.xmlSvc.downloadXml(r.correctedContent, r.nome.replace('.xml', '_corrigido.xml'));
+    this.xmlSvc.downloadXml(
+      r.correctedContent,
+      r.nome.replace('.xml', '_corrigido.xml')
+    );
   }
 
   toggleExpand(nome: string) {
@@ -93,10 +119,40 @@ export class XmlToolsComponent {
   }
 
   // ── Getters ─────────────────────────────────────────────────────────────────
-  get totalPrefixos() { return this.resultados.reduce((s, r) => s + r.prefixos.length, 0); }
-  get totalBlocos()   { return this.resultados.reduce((s, r) => s + r.blocos.length, 0); }
-  get totalGuias()    { return this.resultados.reduce((s, r) => s + r.guiasRenomeadas.length, 0); }
-  get tudoOk()        { return this.totalPrefixos === 0 && this.totalBlocos === 0 && this.totalGuias === 0; }
-  get temProblema()   { return this.estado() === 'resultado' && !this.tudoOk; }
-  get temResultado()  { return this.estado() === 'resultado'; }
+  get totalPrefixos() {
+    return this.resultados.reduce((s, r) => s + r.prefixos.length, 0);
+  }
+
+  get totalBlocos() {
+    return this.resultados.reduce((s, r) => s + r.blocos.length, 0);
+  }
+
+  get totalOutrasDespesasVazias() {
+    return this.resultados.reduce(
+      (s, r) => s + r.outrasDespesasVazias.length,
+      0
+    );
+  }
+
+  get totalGuias() {
+    return this.resultados.reduce(
+      (s, r) => s + r.guiasRenomeadas.length,
+      0
+    );
+  }
+
+  get tudoOk() {
+    return this.totalPrefixos === 0
+      && this.totalBlocos === 0
+      && this.totalOutrasDespesasVazias === 0
+      && this.totalGuias === 0;
+  }
+
+  get temProblema() {
+    return this.estado() === 'resultado' && !this.tudoOk;
+  }
+
+  get temResultado() {
+    return this.estado() === 'resultado';
+  }
 }

@@ -3,7 +3,7 @@
   <div class="tool-page-header">
     <span class="badge badge-xml">XML</span>
     <h1>Ferramentas XML TISS</h1>
-    <p>Processamento em lote — corrija prefixos, remova blocos zerados e normalize guias duplicadas entre arquivos.</p>
+    <p>Processamento em lote — corrija prefixos, remova blocos zerados ou vazios e normalize guias duplicadas entre arquivos.</p>
   </div>
 
   <div class="tool-page-body">
@@ -16,7 +16,7 @@
           <input type="radio" name="op" value="ambos" [(ngModel)]="operacao" />
           <span class="op-icon">⚡</span>
           <span class="op-label">Todas as correções</span>
-          <span class="op-desc">Prefixos + blocos zerados + guias duplicadas</span>
+          <span class="op-desc">Prefixos + blocos zerados/vazios + guias duplicadas</span>
         </label>
         <label class="op-card" [class.selected]="operacao === 'corretor'">
           <input type="radio" name="op" value="corretor" [(ngModel)]="operacao" />
@@ -28,7 +28,7 @@
           <input type="radio" name="op" value="removedor" [(ngModel)]="operacao" />
           <span class="op-icon">🗑️</span>
           <span class="op-label">Removedor de Blocos</span>
-          <span class="op-desc">Remove blocos com valorTotal = 0</span>
+          <span class="op-desc">Remove despesas zeradas e outrasDespesas vazias</span>
         </label>
       </div>
     </div>
@@ -120,6 +120,10 @@
               <span class="stat-num">{{ totalBlocos }}</span>
               <span class="stat-label">bloco(s) zerado(s)</span>
             </div>
+            <div class="summary-stat" [class.has-issue]="totalOutrasDespesasVazias > 0">
+              <span class="stat-num">{{ totalOutrasDespesasVazias }}</span>
+              <span class="stat-label">outrasDespesas vazia(s)</span>
+            </div>
             <div class="summary-stat" [class.has-issue]="totalGuias > 0">
               <span class="stat-num">{{ totalGuias }}</span>
               <span class="stat-label">guia(s) renomeada(s)</span>
@@ -154,8 +158,14 @@
               <div class="accordion-badges">
                 <span class="mini-badge error" *ngIf="r.prefixos.length">{{ r.prefixos.length }} prefixo(s)</span>
                 <span class="mini-badge warning" *ngIf="r.blocos.length">{{ r.blocos.length }} bloco(s)</span>
+                <span class="mini-badge error" *ngIf="r.outrasDespesasVazias.length">
+                  {{ r.outrasDespesasVazias.length }} outrasDespesas vazia(s)
+                </span>
                 <span class="mini-badge info" *ngIf="r.guiasRenomeadas.length">{{ r.guiasRenomeadas.length }} guia(s)</span>
-                <span class="mini-badge ok" *ngIf="!r.prefixos.length && !r.blocos.length && !r.guiasRenomeadas.length">OK</span>
+                <span class="mini-badge ok"
+                      *ngIf="!r.prefixos.length && !r.blocos.length && !r.outrasDespesasVazias.length && !r.guiasRenomeadas.length">
+                  OK
+                </span>
               </div>
             </div>
             <div class="accordion-right">
@@ -235,8 +245,39 @@
               </div>
             </div>
 
+            <!-- outrasDespesas vazias -->
+            <div class="section-block" *ngIf="r.outrasDespesasVazias.length">
+              <p class="block-title">
+                <span class="mini-badge error">{{ r.outrasDespesasVazias.length }}</span>
+                Tags outrasDespesas vazias removidas
+              </p>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Número da guia</th>
+                      <th>Linha</th>
+                      <th>Coluna</th>
+                      <th>Tag encontrada</th>
+                      <th>Correção</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let o of r.outrasDespesasVazias">
+                      <td class="mono">{{ o.numeroGuia }}</td>
+                      <td class="mono">{{ o.linha }}</td>
+                      <td class="mono">{{ o.coluna }}</td>
+                      <td><span class="tag-error">{{ o.original }}</span></td>
+                      <td><span class="tag-ok">Tag removida</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- Arquivo sem problemas -->
-            <div class="no-issues" *ngIf="!r.prefixos.length && !r.blocos.length && !r.guiasRenomeadas.length">
+            <div class="no-issues"
+                 *ngIf="!r.prefixos.length && !r.blocos.length && !r.outrasDespesasVazias.length && !r.guiasRenomeadas.length">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/>
                 <path d="M5 8l2.5 2.5 3.5-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
