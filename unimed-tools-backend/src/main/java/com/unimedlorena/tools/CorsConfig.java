@@ -12,8 +12,13 @@ public class CorsConfig {
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(List.of("*"));
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+        cfg.setAllowedOriginPatterns(List.of(
+            "http://localhost:4200",
+            "http://localhost:3000",
+            "https://corretor-de-arquivos.onrender.com",
+            "https://corretor-de-arquivos.vercel.app"
+        ));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setExposedHeaders(List.of("X-Stats", "Content-Disposition"));
         cfg.setAllowCredentials(false);

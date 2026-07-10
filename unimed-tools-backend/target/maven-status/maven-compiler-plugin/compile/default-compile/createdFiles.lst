@@ -10,6 +10,7 @@ com\unimedlorena\tools\controller\XmlController.class
 com\unimedlorena\tools\controller\EspecialidadeController.class
 com\unimedlorena\tools\CorsConfig.class
 com\unimedlorena\tools\dto\AnsResultado.class
+com\unimedlorena\tools\controller\HealthController.class
 com\unimedlorena\tools\dto\EspecialidadeStats.class
 com\unimedlorena\tools\controller\AnsController.class
 com\unimedlorena\tools\service\EspecialidadeService$Resultado.class

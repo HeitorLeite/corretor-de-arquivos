@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/xml")
-@CrossOrigin(origins = "http://localhost:4200")
 public class XmlController {
 
     private final XmlService xmlService;
