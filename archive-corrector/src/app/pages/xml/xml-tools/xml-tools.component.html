@@ -134,7 +134,7 @@
             </div>
           </div>
           <div class="summary-actions">
-            <button class="btn btn-primary" [disabled]="estado() === 'baixando'" (click)="baixarTodos()">
+            <button class="btn btn-primary" [disabled]="estado() === 'baixando'" (click)="abrirDownloadTodos()">
               <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                 <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor"
                       stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -169,7 +169,7 @@
               </div>
             </div>
             <div class="accordion-right">
-              <button class="btn btn-sm" (click)="$event.stopPropagation(); baixarArquivo(r)">
+              <button class="btn btn-sm" (click)="$event.stopPropagation(); abrirDownloadArquivo(r)">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   <path d="M6.5 1v7M4 5.5l2.5 2.5L9 5.5M1 11h11" stroke="currentColor"
                         stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -292,4 +292,119 @@
     </ng-container>
 
   </div>
+</div>
+
+
+<!-- ── MODAL DE NOMEAÇÃO E DOWNLOAD ── -->
+<div class="download-modal-backdrop" *ngIf="modalDownloadAberto" (click)="fecharModalDownload()">
+  <section class="download-modal" role="dialog" aria-modal="true"
+           aria-labelledby="download-modal-title" (click)="$event.stopPropagation()">
+
+    <header class="download-modal-header">
+      <div>
+        <span class="download-modal-kicker">
+          {{ resultadosDownload.length }} arquivo(s) selecionado(s)
+        </span>
+        <h2 id="download-modal-title">Como deseja nomear os arquivos?</h2>
+        <p *ngIf="resultadosDownload.length > 1">
+          Todos os XMLs serão reunidos em um único arquivo ZIP.
+        </p>
+        <p *ngIf="resultadosDownload.length === 1">
+          Escolha o nome antes de baixar o XML corrigido.
+        </p>
+      </div>
+
+      <button class="download-modal-close" type="button" title="Fechar"
+              [disabled]="estado() === 'baixando'" (click)="fecharModalDownload()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="download-modal-body">
+      <div class="naming-options">
+        <label class="naming-option" [class.selected]="tipoNomeDownload === 'numerico'">
+          <input type="radio" name="tipoNomeDownload" value="numerico"
+                 [(ngModel)]="tipoNomeDownload" />
+          <span class="naming-option-icon">123</span>
+          <span class="naming-option-title">Ordem numérica</span>
+          <span class="naming-option-description">1.xml, 2.xml, 3.xml…</span>
+        </label>
+
+        <label class="naming-option" [class.selected]="tipoNomeDownload === 'corrigido'">
+          <input type="radio" name="tipoNomeDownload" value="corrigido"
+                 [(ngModel)]="tipoNomeDownload" />
+          <span class="naming-option-icon">✓</span>
+          <span class="naming-option-title">Nome original + corrigido</span>
+          <span class="naming-option-description">arquivo_corrigido.xml</span>
+        </label>
+
+        <label class="naming-option" [class.selected]="tipoNomeDownload === 'personalizado'">
+          <input type="radio" name="tipoNomeDownload" value="personalizado"
+                 [(ngModel)]="tipoNomeDownload" />
+          <span class="naming-option-icon">✎</span>
+          <span class="naming-option-title">Nomes personalizados</span>
+          <span class="naming-option-description">Defina um nome para cada XML</span>
+        </label>
+      </div>
+
+      <!-- Prévia dos nomes automáticos -->
+      <div class="download-preview"
+           *ngIf="tipoNomeDownload === 'numerico' || tipoNomeDownload === 'corrigido'">
+        <p class="download-preview-title">Prévia dos arquivos</p>
+        <div class="download-preview-list">
+          <div class="download-preview-item"
+               *ngFor="let resultado of resultadosDownload; let i = index">
+            <span class="download-original-name">{{ resultado.nome }}</span>
+            <span class="download-arrow">→</span>
+            <strong>{{ nomeGeradoPreview(i) }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos de nomes personalizados -->
+      <div class="custom-names" *ngIf="tipoNomeDownload === 'personalizado'">
+        <p class="download-preview-title">Nomes personalizados</p>
+
+        <div class="custom-name-row"
+             *ngFor="let resultado of resultadosDownload; let i = index">
+          <label [for]="'nome-personalizado-' + i">{{ resultado.nome }}</label>
+          <div class="custom-name-input">
+            <input [id]="'nome-personalizado-' + i" type="text"
+                   autocomplete="off" maxlength="180"
+                   placeholder="Digite o novo nome"
+                   [(ngModel)]="nomesPersonalizados[i]" />
+            <span>.xml</span>
+          </div>
+          <small *ngIf="nomeGeradoPreview(i)">
+            Será salvo como <strong>{{ nomeGeradoPreview(i) }}</strong>
+          </small>
+        </div>
+      </div>
+
+      <p class="download-error" *ngIf="erroNomesDownload">{{ erroNomesDownload }}</p>
+      <p class="download-error" *ngIf="erroDownload">{{ erroDownload }}</p>
+    </div>
+
+    <footer class="download-modal-footer">
+      <button class="btn" type="button" [disabled]="estado() === 'baixando'"
+              (click)="fecharModalDownload()">
+        Cancelar
+      </button>
+
+      <button class="btn btn-primary" type="button"
+              *ngIf="tipoNomeDownload"
+              [disabled]="!podeConfirmarDownload"
+              (click)="confirmarDownload()">
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none"
+             *ngIf="estado() !== 'baixando'">
+          <path d="M7.5 2v8M4 7l3.5 3.5L11 7M2 13h11" stroke="currentColor"
+                stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        {{ textoBotaoDownload }}
+      </button>
+    </footer>
+  </section>
 </div>
