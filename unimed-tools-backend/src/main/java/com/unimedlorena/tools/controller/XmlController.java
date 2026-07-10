@@ -1,12 +1,18 @@
 package com.unimedlorena.tools.controller;
 
-import com.unimedlorena.tools.dto.XmlAnaliseResponse;
-import com.unimedlorena.tools.service.XmlService;
-import org.springframework.http.*;
-import org.springframework.web.bind.annotation.*;
+import java.nio.charset.StandardCharsets;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.charset.StandardCharsets;
+import com.unimedlorena.tools.dto.XmlAnaliseResponse;
+import com.unimedlorena.tools.service.XmlService;
 
 @RestController
 @RequestMapping("/api/xml")
@@ -50,12 +56,12 @@ public class XmlController {
 
         String originalName = file.getOriginalFilename();
         String outputName = originalName != null
-            ? originalName.replace(".xml", "_corrigido.xml")
-            : "corrigido.xml";
+                ? originalName.replace(".xml", "_corrigido.xml")
+                : "corrigido.xml";
 
         return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + outputName + "\"")
-            .contentType(MediaType.APPLICATION_XML)
-            .body(corrected.getBytes(StandardCharsets.UTF_8));
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + outputName + "\"")
+                .contentType(MediaType.APPLICATION_XML)
+                .body(corrected.getBytes(StandardCharsets.UTF_8));
     }
 }
