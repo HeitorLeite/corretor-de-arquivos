@@ -22,9 +22,10 @@ export class SidebarComponent {
   @Output() toggleSidebar = new EventEmitter<void>();
 
   items: NavItem[] = [
-    { label: 'XML',        tag: 'TISS',                  badgeClass: 'cat-xml',        route: '/xml/ferramentas',       ready: true  },
-    { label: 'BI',         tag: 'Business Intelligence',  badgeClass: 'cat-bi',         route: '/bi/especialidade-medica', ready: true },
-    { label: 'Fechamento', tag: 'Produção',               badgeClass: 'cat-fechamento', route: '/fechamento/corretor',   ready: false },
+    { label: 'XML', tag: 'TISS', badgeClass: 'cat-xml', route: '/xml/ferramentas', ready: true },
+    { label: 'BI', tag: 'Business Intelligence', badgeClass: 'cat-bi', route: '/bi/especialidade-medica', ready: true },
+    { label: 'Relatórios', tag: 'Consultas SGU', badgeClass: 'cat-relatorios', route: '/relatorios', ready: true },
+    { label: 'Fechamento', tag: 'Produção', badgeClass: 'cat-fechamento', route: '/fechamento/corretor', ready: false },
     { label: 'ANS', tag: 'Agência Nac. Saúde', badgeClass: 'cat-ans', route: '/ans/corretor-rede', ready: true },
   ];
 }

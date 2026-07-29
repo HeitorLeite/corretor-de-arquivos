@@ -11,6 +11,7 @@ export const routes: Routes = [
       { path: 'fechamento/corretor', loadComponent: () => import('./pages/fechamento/corretor-fechamento/corretor-fechamento.component').then(m => m.CorretorFechamentoComponent) },
       { path: 'ans/corretor-rede', loadComponent: () => import('./pages/ans/corretor-rede/corretor-rede.component').then(m => m.CorretorRedeComponent) },
       { path: 'bi/especialidade-medica', loadComponent: () => import('./pages/bi/especialidade-medica/especialidade-medica.component').then(m => m.EspecialidadeMedicaComponent) },
+      { path: 'relatorios', loadComponent: () => import('./pages/relatorios/relatorios.component').then(m => m.RelatoriosComponent) },
       { path: 'xml/corretor', redirectTo: 'xml/ferramentas' },
       { path: 'xml/removedor', redirectTo: 'xml/ferramentas' },
     ],
