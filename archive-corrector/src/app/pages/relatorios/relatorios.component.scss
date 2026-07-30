@@ -733,3 +733,141 @@
     overflow: visible;
   }
 }
+
+/* ==========================================================================
+   Edição de APIs
+   ========================================================================== */
+
+.report-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.edit-report,
+.delete-report {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 7px;
+  opacity: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  transition:
+    opacity .15s ease,
+    color .15s ease,
+    background .15s ease;
+}
+
+.edit-report:hover,
+.edit-report:focus-visible {
+  background: var(--brand-green-light);
+  color: var(--brand-green);
+  outline: none;
+}
+
+.delete-report:hover,
+.delete-report:focus-visible {
+  background: var(--error-bg);
+  color: var(--error);
+  outline: none;
+}
+
+.report-card:hover .edit-report,
+.report-card:hover .delete-report,
+.report-card.active .edit-report,
+.report-card.active .delete-report,
+.edit-report:focus-visible,
+.delete-report:focus-visible {
+  opacity: 1;
+}
+
+.report-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.api-edit-loading {
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  text-align: left;
+}
+
+.api-edit-loading strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.api-edit-loading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.spinner-green {
+  width: 22px;
+  height: 22px;
+  border-color: rgba(0, 132, 61, .2);
+  border-top-color: var(--brand-green);
+}
+
+.edit-api-warning,
+.template-replacement-note {
+  padding: 13px 14px;
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+}
+
+.edit-api-warning {
+  border-color: #f2cc8f;
+  background: #fff8e8;
+  color: #7a4b00;
+}
+
+.template-replacement-note {
+  border-color: #b9dec9;
+  background: var(--brand-green-light);
+  color: var(--brand-green);
+}
+
+.edit-api-warning strong,
+.template-replacement-note strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.edit-api-warning p,
+.template-replacement-note p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.edit-api-warning code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .report-heading-actions {
+    width: 100%;
+  }
+
+  .report-heading-actions .btn {
+    flex: 1;
+  }
+
+  .edit-report,
+  .delete-report {
+    opacity: 1;
+  }
+}

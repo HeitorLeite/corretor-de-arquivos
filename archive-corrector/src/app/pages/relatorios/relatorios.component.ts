@@ -65,6 +65,18 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   novaOrdenacao = '';
   novosFiltros: SguFiltro[] = [this.filtroVazio()];
 
+  modalEditarAberto = false;
+  carregandoEdicao = false;
+  salvandoEdicao = false;
+  relatorioEmEdicao: RelatorioCatalogo | null = null;
+  apiOriginalEdicao: SguApiDefinicao | null = null;
+  editarApiNome = '';
+  editarNomeExibicao = '';
+  editarDescricao = '';
+  editarConsultaSql = '';
+  editarOrdenacao = '';
+  filtrosEdicao: SguFiltro[] = [this.filtroVazio()];
+
   carregandoListaApis = false;
   listaApisCarregada = false;
   apisDisponiveis: SguApiDefinicao[] = [];
@@ -361,13 +373,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       nome: this.novoApiNome.trim(),
       consultaSQL: this.novaConsultaSql.trim(),
       ordenacao: this.novaOrdenacao.trim(),
-      filtros: this.novosFiltros.map(filtro => ({
-        ...filtro,
-        nomeFiltro: filtro.nomeFiltro.trim(),
-        conteudoFiltro: filtro.conteudoFiltro.trim(),
-        tipoDadoFiltro: filtro.tipoDadoFiltro.trim().toUpperCase(),
-        mascaraFiltro: filtro.mascaraFiltro.trim(),
-      })),
+      filtros: this.normalizarFiltros(this.novosFiltros),
     };
 
     const validacao = this.validarNovaApi(definicao);
@@ -401,6 +407,161 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
         },
       });
   }
+
+  abrirEdicao(
+    relatorio: RelatorioCatalogo,
+    evento?: Event
+  ): void {
+    evento?.stopPropagation();
+
+    if (this.carregandoEdicao || this.salvandoEdicao) return;
+
+    this.relatorioEmEdicao = relatorio;
+    this.apiOriginalEdicao = null;
+    this.editarApiNome = relatorio.apiNome;
+    this.editarNomeExibicao = relatorio.nomeExibicao;
+    this.editarDescricao = relatorio.descricao;
+    this.editarConsultaSql = '';
+    this.editarOrdenacao = '';
+    this.filtrosEdicao = relatorio.filtros.length
+      ? relatorio.filtros.map(filtro => ({ ...filtro }))
+      : [this.filtroVazio()];
+
+    this.modalEditarAberto = true;
+    this.carregandoEdicao = true;
+    this.erro = '';
+    this.sucesso = '';
+
+    this.relatorioService
+      .buscarApi(relatorio.apiNome)
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.carregandoEdicao = false))
+      )
+      .subscribe({
+        next: api => {
+          this.apiOriginalEdicao = this.clonarDefinicaoApi(api);
+          this.editarApiNome = api.nome;
+          this.editarConsultaSql = api.consultaSQL ?? '';
+          this.editarOrdenacao = api.ordenacao ?? '';
+          this.filtrosEdicao = Array.isArray(api.filtros) && api.filtros.length
+            ? api.filtros.map(filtro => ({ ...filtro }))
+            : [this.filtroVazio()];
+        },
+        error: err => {
+          this.erro = this.mensagemErro(
+            err,
+            `Não foi possível carregar a definição da API ${relatorio.apiNome}.`
+          );
+        },
+      });
+  }
+
+  fecharEdicao(): void {
+    if (this.carregandoEdicao || this.salvandoEdicao) return;
+
+    this.modalEditarAberto = false;
+    this.relatorioEmEdicao = null;
+    this.apiOriginalEdicao = null;
+  }
+
+  adicionarFiltroEdicao(): void {
+    this.filtrosEdicao.push(this.filtroVazio());
+  }
+
+  removerFiltroEdicao(indice: number): void {
+    if (this.filtrosEdicao.length > 1) {
+      this.filtrosEdicao.splice(indice, 1);
+    }
+  }
+
+  salvarEdicaoApi(): void {
+    if (
+      !this.relatorioEmEdicao ||
+      !this.apiOriginalEdicao ||
+      this.salvandoEdicao
+    ) {
+      return;
+    }
+
+    const novaDefinicao: SguApiDefinicao = {
+      nome: this.editarApiNome.trim(),
+      consultaSQL: this.editarConsultaSql.trim(),
+      ordenacao: this.editarOrdenacao.trim(),
+      filtros: this.normalizarFiltros(this.filtrosEdicao),
+    };
+
+    const validacao = this.validarDefinicaoApi(
+      novaDefinicao,
+      this.editarNomeExibicao
+    );
+
+    if (validacao) {
+      this.erro = validacao;
+      return;
+    }
+
+    const nomeAnterior = this.relatorioEmEdicao.apiNome;
+    const idRelatorio = this.relatorioEmEdicao.id;
+    const definicaoAnterior = this.clonarDefinicaoApi(
+      this.apiOriginalEdicao
+    );
+
+    this.salvandoEdicao = true;
+    this.erro = '';
+    this.sucesso = '';
+
+    this.relatorioService
+      .substituirApi(
+        nomeAnterior,
+        definicaoAnterior,
+        novaDefinicao
+      )
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.salvandoEdicao = false))
+      )
+      .subscribe({
+        next: () => {
+          const atualizado: RelatorioCatalogo = {
+            ...this.relatorioEmEdicao!,
+            nomeExibicao: this.editarNomeExibicao.trim(),
+            descricao: this.editarDescricao.trim(),
+            apiNome: novaDefinicao.nome,
+            filtros: novaDefinicao.filtros.map(filtro => ({ ...filtro })),
+          };
+
+          this.atualizarRelatorioEditado(atualizado);
+          this.listaApisCarregada = false;
+          this.modalEditarAberto = false;
+          this.relatorioEmEdicao = null;
+          this.apiOriginalEdicao = null;
+
+          this.sucesso =
+            nomeAnterior === novaDefinicao.nome
+              ? `A API ${novaDefinicao.nome} foi substituída com sucesso.`
+              : `A API ${nomeAnterior} foi substituída por ${novaDefinicao.nome}.`;
+
+          const selecionadoAtualizado = this.relatorios.find(
+            relatorio => relatorio.id === idRelatorio
+          );
+
+          if (selecionadoAtualizado) {
+            this.selecionar(
+              selecionadoAtualizado,
+              Boolean(this.templateAtivo)
+            );
+          }
+        },
+        error: err => {
+          this.erro = this.mensagemErro(
+            err,
+            'Não foi possível substituir a API.'
+          );
+        },
+      });
+  }
+
 
   gerar(pagina = 1): void {
     if (!this.selecionado || this.carregando) return;
@@ -885,6 +1046,58 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     return parametros;
   }
 
+  private normalizarFiltros(filtros: SguFiltro[]): SguFiltro[] {
+    return filtros.map(filtro => ({
+      ...filtro,
+      nomeFiltro: filtro.nomeFiltro.trim(),
+      conteudoFiltro: filtro.conteudoFiltro.trim(),
+      tipoDadoFiltro: filtro.tipoDadoFiltro.trim().toUpperCase(),
+      mascaraFiltro: filtro.mascaraFiltro.trim(),
+      obrigatorioFiltro:
+        filtro.obrigatorioFiltro === 'S' ? 'S' : 'N',
+    }));
+  }
+
+  private clonarDefinicaoApi(
+    api: SguApiDefinicao
+  ): SguApiDefinicao {
+    return {
+      nome: api.nome,
+      consultaSQL: api.consultaSQL ?? '',
+      ordenacao: api.ordenacao ?? '',
+      filtros: Array.isArray(api.filtros)
+        ? api.filtros.map(filtro => ({ ...filtro }))
+        : [],
+    };
+  }
+
+  private atualizarRelatorioEditado(
+    atualizado: RelatorioCatalogo
+  ): void {
+    this.relatorios = this.relatorios.map(relatorio =>
+      relatorio.id === atualizado.id ? atualizado : relatorio
+    );
+
+    /*
+     * Os templates armazenam o ID do relatório, não o nome da API.
+     * Como o ID é preservado na edição, todos os templates continuam
+     * apontando automaticamente para a nova definição.
+     */
+    this.relatoriosAbertos = this.relatoriosAbertos.map(relatorio =>
+      relatorio.id === atualizado.id ? atualizado : relatorio
+    );
+
+    delete this.valoresFiltroPorRelatorio[atualizado.id];
+
+    this.persistir();
+    this.persistirTemplates();
+    this.aplicarPesquisa();
+
+    if (this.selecionado?.id === atualizado.id) {
+      this.selecionado = atualizado;
+    }
+  }
+
   private adicionarAoCatalogo(api: SguApiDefinicao): void {
     const existente = this.relatorios.find(
       relatorio => relatorio.apiNome === api.nome
@@ -969,10 +1182,17 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   }
 
   private validarNovaApi(api: SguApiDefinicao): string {
+    return this.validarDefinicaoApi(api, this.novoNomeExibicao);
+  }
+
+  private validarDefinicaoApi(
+    api: SguApiDefinicao,
+    nomeExibicao: string
+  ): string {
     if (!api.nome) return 'Informe o nome da API.';
     if (!api.consultaSQL) return 'Informe a consulta SQL.';
 
-    if (!this.novoNomeExibicao.trim()) {
+    if (!nomeExibicao.trim()) {
       return 'Informe o nome de exibição do relatório.';
     }
 

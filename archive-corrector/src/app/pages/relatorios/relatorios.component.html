@@ -65,14 +65,24 @@
             <strong>{{ relatorio.nomeExibicao }}</strong>
             <small>{{ relatorio.apiNome }}</small>
           </span>
-          <span
-            class="delete-report"
-            role="button"
-            tabindex="0"
-            title="Excluir relatório"
-            (click)="abrirExclusao(relatorio, $event)"
-            (keydown.enter)="abrirExclusao(relatorio, $event)"
-          >×</span>
+          <span class="report-card-actions">
+            <span
+              class="edit-report"
+              role="button"
+              tabindex="0"
+              title="Editar API e relatório"
+              (click)="abrirEdicao(relatorio, $event)"
+              (keydown.enter)="abrirEdicao(relatorio, $event)"
+            >✎</span>
+            <span
+              class="delete-report"
+              role="button"
+              tabindex="0"
+              title="Excluir relatório"
+              (click)="abrirExclusao(relatorio, $event)"
+              (keydown.enter)="abrirExclusao(relatorio, $event)"
+            >×</span>
+          </span>
         </button>
       </div>
 
@@ -166,9 +176,14 @@
               <h2>{{ selecionado.nomeExibicao }}</h2>
               <p>{{ selecionado.descricao || 'Preencha os filtros abaixo para gerar o relatório.' }}</p>
             </div>
-            <button class="btn btn-secondary btn-sm" type="button" (click)="abrirExclusao(selecionado)">
-              Excluir
-            </button>
+            <div class="report-heading-actions">
+              <button class="btn btn-secondary btn-sm" type="button" (click)="abrirEdicao(selecionado)">
+                Editar API
+              </button>
+              <button class="btn btn-secondary btn-sm" type="button" (click)="abrirExclusao(selecionado)">
+                Excluir
+              </button>
+            </div>
           </div>
 
           <div class="filter-grid" *ngIf="selecionado.filtros.length; else semFiltros">
@@ -531,6 +546,235 @@
       </button>
       <button *ngIf="modoCadastro === 'nova'" class="btn btn-primary" type="button" [disabled]="salvandoApi" (click)="criarNovaApi()">
         {{ salvandoApi ? 'Cadastrando…' : 'Cadastrar API e adicionar' }}
+      </button>
+    </footer>
+  </section>
+</div>
+
+
+<!-- Modal de edição de API -->
+<div class="modal-backdrop" *ngIf="modalEditarAberto" (click)="fecharEdicao()">
+  <section
+    class="modal-card modal-large"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="editar-api-titulo"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <div>
+        <span class="modal-kicker">Substituição de API</span>
+        <h2 id="editar-api-titulo">Editar API do relatório</h2>
+      </div>
+      <button
+        type="button"
+        class="modal-close"
+        [disabled]="carregandoEdicao || salvandoEdicao"
+        (click)="fecharEdicao()"
+        aria-label="Fechar"
+      >×</button>
+    </header>
+
+    <div class="modal-alert" *ngIf="erro">{{ erro }}</div>
+
+    <div class="modal-body api-edit-loading" *ngIf="carregandoEdicao">
+      <span class="spinner spinner-green"></span>
+      <div>
+        <strong>Carregando a definição atual da API…</strong>
+        <p>Os campos serão liberados assim que o SGU responder.</p>
+      </div>
+    </div>
+
+    <div class="modal-body" *ngIf="!carregandoEdicao && apiOriginalEdicao">
+      <div class="edit-api-warning">
+        <strong>Atenção ao salvar</strong>
+        <p>
+          Como o SGU não possui um endpoint específico de edição, a API
+          <code>{{ relatorioEmEdicao?.apiNome }}</code> será apagada e criada novamente.
+          Se a criação falhar, a aplicação tentará restaurar automaticamente a definição anterior.
+        </p>
+      </div>
+
+      <div class="two-cols">
+        <div class="field">
+          <label for="editarApiNome">Nome da API *</label>
+          <input
+            id="editarApiNome"
+            name="editarApiNome"
+            [(ngModel)]="editarApiNome"
+            placeholder="0090-nome-relatorio"
+          />
+          <small>O nome também pode ser alterado.</small>
+        </div>
+
+        <div class="field">
+          <label for="editarNomeExibicao">Nome para exibição *</label>
+          <input
+            id="editarNomeExibicao"
+            name="editarNomeExibicao"
+            [(ngModel)]="editarNomeExibicao"
+            placeholder="Nome do relatório"
+          />
+        </div>
+      </div>
+
+      <div class="field full-field">
+        <label for="editarDescricao">Descrição</label>
+        <input
+          id="editarDescricao"
+          name="editarDescricao"
+          [(ngModel)]="editarDescricao"
+          placeholder="Explique o conteúdo deste relatório"
+        />
+      </div>
+
+      <div class="field full-field">
+        <label for="editarConsultaSql">Consulta SQL *</label>
+        <textarea
+          id="editarConsultaSql"
+          name="editarConsultaSql"
+          rows="11"
+          [(ngModel)]="editarConsultaSql"
+          placeholder="SELECT ... FROM ... WHERE 1 = 1 /*FILTROS*/"
+        ></textarea>
+        <small>O marcador /*FILTROS*/ deve continuar presente na consulta.</small>
+      </div>
+
+      <div class="field full-field">
+        <label for="editarOrdenacao">Ordenação padrão</label>
+        <input
+          id="editarOrdenacao"
+          name="editarOrdenacao"
+          [(ngModel)]="editarOrdenacao"
+          placeholder="Opcional"
+        />
+      </div>
+
+      <div class="filter-builder">
+        <div class="builder-title">
+          <div>
+            <h3>Filtros</h3>
+            <p>
+              O conteúdo deve começar com <code>and </code> e a variável deve
+              ter exatamente o mesmo nome do filtro.
+            </p>
+          </div>
+          <button
+            class="btn btn-secondary btn-sm"
+            type="button"
+            (click)="adicionarFiltroEdicao()"
+          >＋ Adicionar filtro</button>
+        </div>
+
+        <article
+          class="filter-row"
+          *ngFor="let filtro of filtrosEdicao; let i = index"
+        >
+          <div class="filter-row-header">
+            <strong>Filtro {{ i + 1 }}</strong>
+            <button
+              type="button"
+              class="link-danger"
+              [disabled]="filtrosEdicao.length === 1"
+              (click)="removerFiltroEdicao(i)"
+            >Remover</button>
+          </div>
+
+          <div class="filter-fields">
+            <div class="field">
+              <label [for]="'editarNomeFiltro-' + i">Nome *</label>
+              <input
+                [id]="'editarNomeFiltro-' + i"
+                [name]="'editarNomeFiltro-' + i"
+                [(ngModel)]="filtrosEdicao[i].nomeFiltro"
+                [class.input-invalid]="!!erroVariavelFiltro(filtrosEdicao[i])"
+                placeholder="competencia"
+              />
+            </div>
+
+            <div class="field">
+              <label [for]="'editarTipoFiltro-' + i">Tipo *</label>
+              <input
+                [id]="'editarTipoFiltro-' + i"
+                [name]="'editarTipoFiltro-' + i"
+                [(ngModel)]="filtrosEdicao[i].tipoDadoFiltro"
+                list="tipos-filtro-edicao"
+                placeholder="NUMBER"
+              />
+            </div>
+
+            <div class="field field-wide">
+              <label [for]="'editarConteudoFiltro-' + i">Conteúdo SQL *</label>
+              <input
+                [id]="'editarConteudoFiltro-' + i"
+                [name]="'editarConteudoFiltro-' + i"
+                [(ngModel)]="filtrosEdicao[i].conteudoFiltro"
+                [class.input-invalid]="!!erroVariavelFiltro(filtrosEdicao[i])"
+                placeholder="and G.GUIA_NRO_COMPET = :competencia"
+              />
+              <small
+                class="field-error"
+                *ngIf="erroVariavelFiltro(filtrosEdicao[i]) as erroBind"
+              >{{ erroBind }}</small>
+            </div>
+
+            <div class="field">
+              <label [for]="'editarMascaraFiltro-' + i">Máscara</label>
+              <input
+                [id]="'editarMascaraFiltro-' + i"
+                [name]="'editarMascaraFiltro-' + i"
+                [(ngModel)]="filtrosEdicao[i].mascaraFiltro"
+                placeholder="DD/MM/YYYY"
+              />
+            </div>
+
+            <div class="field">
+              <label [for]="'editarObrigatorioFiltro-' + i">Obrigatório</label>
+              <select
+                [id]="'editarObrigatorioFiltro-' + i"
+                [name]="'editarObrigatorioFiltro-' + i"
+                [(ngModel)]="filtrosEdicao[i].obrigatorioFiltro"
+              >
+                <option value="N">Não</option>
+                <option value="S">Sim</option>
+              </select>
+            </div>
+          </div>
+        </article>
+
+        <datalist id="tipos-filtro-edicao">
+          <option value="NUMBER"></option>
+          <option value="DATE"></option>
+          <option value="VARCHAR(120)"></option>
+        </datalist>
+      </div>
+
+      <div class="template-replacement-note">
+        <strong>Templates atualizados automaticamente</strong>
+        <p>
+          O relatório mantém o mesmo identificador interno. Por isso, todos
+          os templates que já contêm este relatório passarão a usar a nova
+          API sem precisar ser recriados.
+        </p>
+      </div>
+    </div>
+
+    <footer class="modal-footer">
+      <button
+        class="btn btn-secondary"
+        type="button"
+        [disabled]="carregandoEdicao || salvandoEdicao"
+        (click)="fecharEdicao()"
+      >Cancelar</button>
+
+      <button
+        class="btn btn-primary"
+        type="button"
+        [disabled]="carregandoEdicao || salvandoEdicao || !apiOriginalEdicao"
+        (click)="salvarEdicaoApi()"
+      >
+        <span class="spinner" *ngIf="salvandoEdicao"></span>
+        {{ salvandoEdicao ? 'Substituindo API…' : 'Salvar e substituir API' }}
       </button>
     </footer>
   </section>

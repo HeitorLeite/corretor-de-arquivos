@@ -1,6 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import {
+  Observable,
+  catchError,
+  concatMap,
+  map,
+  throwError,
+} from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -89,6 +95,98 @@ export class RelatorioService {
     );
   }
 
+  substituirApi(
+    nomeAnterior: string,
+    definicaoAnterior: SguApiDefinicao,
+    novaDefinicao: SguApiDefinicao
+  ): Observable<unknown> {
+    const nomeNormalizado = nomeAnterior.trim();
+    const novoNomeNormalizado = novaDefinicao.nome.trim();
+    const backup: SguApiDefinicao = {
+      ...definicaoAnterior,
+      nome: nomeNormalizado,
+      filtros: Array.isArray(definicaoAnterior.filtros)
+        ? definicaoAnterior.filtros.map(filtro => ({ ...filtro }))
+        : [],
+    };
+
+    if (!nomeNormalizado) {
+      return throwError(
+        () => new Error('O nome atual da API não foi informado.')
+      );
+    }
+
+    if (!novoNomeNormalizado) {
+      return throwError(
+        () => new Error('O novo nome da API não foi informado.')
+      );
+    }
+
+    const executarSubstituicao = (): Observable<unknown> =>
+      this.apagarApi(nomeNormalizado).pipe(
+        concatMap(() =>
+          this.criarApi({
+            ...novaDefinicao,
+            nome: novoNomeNormalizado,
+          }).pipe(
+            catchError(erroCriacao =>
+              this.criarApi(backup).pipe(
+                catchError(erroRestauracao =>
+                  throwError(
+                    () =>
+                      new Error(
+                        `A API antiga foi apagada, a nova não pôde ser criada e a restauração também falhou. ` +
+                          `Erro da criação: ${this.detalheErro(erroCriacao)}. ` +
+                          `Erro da restauração: ${this.detalheErro(erroRestauracao)}.`
+                      )
+                  )
+                ),
+                concatMap(() =>
+                  throwError(
+                    () =>
+                      new Error(
+                        `Não foi possível criar a nova versão da API. ` +
+                          `A definição anterior foi restaurada automaticamente. ` +
+                          `Detalhe: ${this.detalheErro(erroCriacao)}`
+                      )
+                  )
+                )
+              )
+            )
+          )
+        )
+      );
+
+    if (
+      novoNomeNormalizado.toLowerCase() ===
+      nomeNormalizado.toLowerCase()
+    ) {
+      return executarSubstituicao();
+    }
+
+    return this.listarApis().pipe(
+      concatMap(apis => {
+        const nomeJaExiste = apis.some(
+          api =>
+            String(api?.nome ?? '').trim().toLowerCase() ===
+            novoNomeNormalizado.toLowerCase()
+        );
+
+        if (nomeJaExiste) {
+          return throwError(
+            () =>
+              new Error(
+                `Já existe uma API chamada ${novoNomeNormalizado}. ` +
+                  'Escolha outro nome antes de salvar a edição.'
+              )
+          );
+        }
+
+        return executarSubstituicao();
+      })
+    );
+  }
+
   executar(
     nome: string,
     parametros: Record<string, unknown>
@@ -111,6 +209,21 @@ export class RelatorioService {
       )}?formato=${formato}`,
       { filtros, nomeArquivo },
       { responseType: 'blob' }
+    );
+  }
+
+  private detalheErro(erro: any): string {
+    const corpo = erro?.error;
+
+    if (typeof corpo === 'string') {
+      return corpo;
+    }
+
+    return (
+      corpo?.message ??
+      corpo?.error ??
+      erro?.message ??
+      'erro não informado'
     );
   }
 
