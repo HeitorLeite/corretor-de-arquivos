@@ -12,6 +12,8 @@ services:
         sync: false
       - key: SGU_API_BASE_URL
         value: https://api.lorena.sgusuite.com.br
+      - key: SGU_API_KEY_HEADERS
+        value: apikey,x-api-key
       - key: SGU_API_PROCEDURE_PATH
         value: /api/procedure/p_prcssa_dados
       - key: SGU_API_EXECUTION_PATH

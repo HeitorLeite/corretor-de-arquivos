@@ -2,7 +2,9 @@ package com.unimedlorena.tools.service;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -31,6 +33,7 @@ public class SguRelatorioService {
 
         private final String baseUrl;
         private final String apiKey;
+        private final List<String> apiKeyHeaderNames;
         private final String procedurePath;
         private final String executionPath;
 
@@ -43,6 +46,8 @@ public class SguRelatorioService {
 
                         @Value("${sgu.api.key:}") String apiKey,
 
+                        @Value("${sgu.api.key-headers:apikey,x-api-key}") String apiKeyHeaders,
+
                         @Value("${sgu.api.procedure-path:"
                                         + "/api/procedure/p_prcssa_dados}") String procedurePath,
 
@@ -52,6 +57,7 @@ public class SguRelatorioService {
 
                 this.baseUrl = normalizarBaseUrl(baseUrl);
                 this.apiKey = normalizarApiKey(apiKey);
+                this.apiKeyHeaderNames = normalizarHeaders(apiKeyHeaders);
                 this.procedurePath = normalizarPath(procedurePath);
                 this.executionPath = normalizarPath(executionPath);
 
@@ -77,6 +83,7 @@ public class SguRelatorioService {
                                 this.executionPath,
                                 !this.apiKey.isBlank(),
                                 this.apiKey.length());
+                log.info("Headers de API key configurados para o SGU: {}", this.apiKeyHeaderNames);
         }
 
         public Map<String, Object> listar(String nome) {
@@ -143,24 +150,20 @@ public class SguRelatorioService {
                                 uri);
 
                 try {
-                        Map<String, Object> resposta = client
+                        RestClient.RequestBodySpec request = client
                                         .post()
                                         .uri(uri)
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .accept(MediaType.APPLICATION_JSON)
-
-                                        /*
-                                         * O SGU/Kong espera exatamente este header.
-                                         * Os nomes dos headers HTTP não diferenciam
-                                         * maiúsculas e minúsculas, mas mantemos
-                                         * exatamente a escrita usada no Thunder Client.
-                                         */
-                                        .header("apikey", apiKey)
-
                                         .header(
                                                         HttpHeaders.CACHE_CONTROL,
-                                                        "no-cache")
+                                                        "no-cache");
 
+                        for (String headerName : apiKeyHeaderNames) {
+                                request = request.header(headerName, apiKey);
+                        }
+
+                        Map<String, Object> resposta = request
                                         .body(body)
                                         .retrieve()
                                         .body(
@@ -392,6 +395,19 @@ public class SguRelatorioService {
                 }
 
                 return valor;
+        }
+
+        private static List<String> normalizarHeaders(String headers) {
+                if (headers == null || headers.isBlank()) {
+                        return List.of("apikey");
+                }
+
+                return Arrays.stream(headers.split(","))
+                                .map(String::trim)
+                                .filter(valor -> !valor.isBlank())
+                                .map(valor -> valor.toLowerCase(Locale.ROOT))
+                                .distinct()
+                                .toList();
         }
 
         private static String normalizarPath(
