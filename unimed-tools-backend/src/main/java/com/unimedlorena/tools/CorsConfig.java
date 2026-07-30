@@ -10,20 +10,41 @@ import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 public class CorsConfig {
+
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration cfg = new CorsConfiguration();
+
         cfg.setAllowedOriginPatterns(List.of(
-                "http://localhost:4200",
-                "http://localhost:3000",
-                "https://corretor-de-arquivos.onrender.com",
-                "https://corretor-de-arquivos.vercel.app"));
-        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+            "http://localhost:4200",
+            "http://localhost:3000",
+            "https://corretor-de-arquivos.onrender.com",
+            "https://corretor-de-arquivos.vercel.app",
+            "https://*.vercel.app"
+        ));
+
+        cfg.setAllowedMethods(List.of(
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS"
+        ));
+
         cfg.setAllowedHeaders(List.of("*"));
-        cfg.setExposedHeaders(List.of("X-Stats", "Content-Disposition"));
+        cfg.setExposedHeaders(List.of(
+            "X-Stats",
+            "Content-Disposition"
+        ));
+
         cfg.setAllowCredentials(false);
-        UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
-        src.registerCorsConfiguration("/**", cfg);
-        return new CorsFilter(src);
+
+        UrlBasedCorsConfigurationSource source =
+            new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", cfg);
+
+        return new CorsFilter(source);
     }
 }
