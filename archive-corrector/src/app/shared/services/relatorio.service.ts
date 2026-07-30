@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
+
 import { environment } from '../../../environments/environment';
 import {
   FormatoExportacao,
@@ -12,15 +13,14 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class RelatorioService {
-  // Usa a mesma URL de backend configurada no restante da aplicação.
-  // Produção: https://corretor-de-arquivos-api.onrender.com/api/relatorios
   private readonly baseUrl = `${environment.apiUrl}/relatorios`;
   private readonly storageKey = 'unimed-tools.relatorios.v1';
 
-  constructor(private http: HttpClient) {}
+  constructor(private readonly http: HttpClient) {}
 
   listarCatalogo(): RelatorioCatalogo[] {
     if (typeof localStorage === 'undefined') return [];
+
     try {
       const salvo = localStorage.getItem(this.storageKey);
       return salvo ? (JSON.parse(salvo) as RelatorioCatalogo[]) : [];
@@ -36,20 +36,42 @@ export class RelatorioService {
   }
 
   buscarApi(nome: string): Observable<SguApiDefinicao> {
+    const nomeNormalizado = nome.trim();
+
     return this.http
-      .post<SguListaResponse>(`${this.baseUrl}/sgu/listar`, { nome })
+      .post<SguListaResponse>(`${this.baseUrl}/sgu/listar`, {
+        nome: nomeNormalizado,
+      })
       .pipe(
         map(resposta => {
+          const conteudo = Array.isArray(resposta?.content)
+            ? resposta.content
+            : [];
+
           const encontrada =
-            resposta.content?.find(api => api.nome === nome) ??
-            resposta.content?.[0];
+            conteudo.find(
+              api =>
+                api.nome?.toLowerCase() === nomeNormalizado.toLowerCase()
+            ) ?? conteudo[0];
 
           if (!encontrada) {
-            throw new Error(`A API ${nome} não foi encontrada no SGU.`);
+            throw new Error(
+              `A API ${nomeNormalizado} não foi encontrada no SGU.`
+            );
           }
 
           return encontrada;
         })
+      );
+  }
+
+  listarApis(): Observable<SguApiDefinicao[]> {
+    return this.http
+      .post<SguListaResponse>(`${this.baseUrl}/sgu/listar`, { nome: '' })
+      .pipe(
+        map(resposta =>
+          Array.isArray(resposta?.content) ? resposta.content : []
+        )
       );
   }
 
@@ -80,7 +102,9 @@ export class RelatorioService {
     nomeArquivo: string
   ): Observable<Blob> {
     return this.http.post(
-      `${this.baseUrl}/sgu/exportar/${encodeURIComponent(nome)}?formato=${formato}`,
+      `${this.baseUrl}/sgu/exportar/${encodeURIComponent(
+        nome
+      )}?formato=${formato}`,
       { filtros, nomeArquivo },
       { responseType: 'blob' }
     );
