@@ -27,6 +27,14 @@ export interface RelatorioCatalogo {
   criadoEm: string;
 }
 
+export interface RelatorioTemplate {
+  id: string;
+  nome: string;
+  descricao: string;
+  relatorioIds: string[];
+  criadoEm: string;
+}
+
 export interface SguResultado {
   content: Record<string, unknown>[];
   totalElements?: number;

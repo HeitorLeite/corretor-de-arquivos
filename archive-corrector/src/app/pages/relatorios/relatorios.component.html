@@ -5,16 +5,22 @@
       <h1>Central de relatórios</h1>
       <p>Consulte as APIs cadastradas no SGU, visualize os dados e exporte o relatório completo.</p>
     </div>
-    <button class="btn btn-primary" type="button" (click)="abrirNovo()">
-      <span aria-hidden="true">＋</span> Novo relatório
-    </button>
+    <div class="page-header-actions">
+      <button class="btn btn-secondary" type="button" (click)="abrirNovoTemplate()">
+        <span aria-hidden="true">▦</span> Novo template
+      </button>
+      <button class="btn btn-primary" type="button" (click)="abrirNovo()">
+        <span aria-hidden="true">＋</span> Novo relatório
+      </button>
+    </div>
   </header>
 
-  <div class="alert alert-error" *ngIf="erro">
+  <div class="alert alert-error" *ngIf="erro" role="alert">
     <span>{{ erro }}</span>
     <button type="button" (click)="erro = ''" aria-label="Fechar">×</button>
   </div>
-  <div class="alert alert-success" *ngIf="sucesso">
+
+  <div class="alert alert-success" *ngIf="sucesso" role="status">
     <span>{{ sucesso }}</span>
     <button type="button" (click)="sucesso = ''" aria-label="Fechar">×</button>
   </div>
@@ -31,12 +37,7 @@
       <label class="search-box">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3" />
-          <path
-            d="M10.5 10.5L14 14"
-            stroke="currentColor"
-            stroke-width="1.3"
-            stroke-linecap="round"
-          />
+          <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
         </svg>
         <input
           type="search"
@@ -50,24 +51,14 @@
         <button
           class="report-card"
           type="button"
-          *ngFor="let relatorio of relatoriosFiltrados"
-          [class.active]="selecionado?.id === relatorio.id"
+          *ngFor="let relatorio of relatoriosFiltrados; trackBy: trackByRelatorioId"
+          [class.active]="selecionado?.id === relatorio.id && !templateAtivo"
           (click)="selecionar(relatorio)"
         >
           <span class="report-icon">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path
-                d="M4 2.5h7l3 3v10H4v-13Z"
-                stroke="currentColor"
-                stroke-width="1.2"
-                stroke-linejoin="round"
-              />
-              <path
-                d="M11 2.5V6h3M6.5 9h5M6.5 12h5"
-                stroke="currentColor"
-                stroke-width="1.2"
-                stroke-linecap="round"
-              />
+              <path d="M4 2.5h7l3 3v10H4v-13Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+              <path d="M11 2.5V6h3M6.5 9h5M6.5 12h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
           </span>
           <span class="report-copy">
@@ -81,8 +72,7 @@
             title="Excluir relatório"
             (click)="abrirExclusao(relatorio, $event)"
             (keydown.enter)="abrirExclusao(relatorio, $event)"
-            >×</span
-          >
+          >×</span>
         </button>
       </div>
 
@@ -95,30 +85,94 @@
           </button>
         </div>
       </ng-template>
+
+      <div class="catalog-divider"></div>
+
+      <div class="template-catalog-header">
+        <div>
+          <h2>Templates</h2>
+          <span>{{ templates.length }} salvo(s)</span>
+        </div>
+        <button type="button" class="template-add-button" title="Criar template" (click)="abrirNovoTemplate()">＋</button>
+      </div>
+
+      <div class="template-list" *ngIf="templates.length; else templatesVazios">
+        <button
+          class="template-card"
+          type="button"
+          *ngFor="let template of templates; trackBy: trackByTemplateId"
+          [class.active]="templateAtivo?.id === template.id"
+          (click)="usarTemplate(template)"
+        >
+          <span class="template-icon" aria-hidden="true">▦</span>
+          <span class="template-copy">
+            <strong>{{ template.nome }}</strong>
+            <small>{{ resumoTemplate(template) }}</small>
+          </span>
+          <span
+            class="delete-template"
+            role="button"
+            tabindex="0"
+            title="Excluir template"
+            (click)="excluirTemplate(template, $event)"
+            (keydown.enter)="excluirTemplate(template, $event)"
+          >×</span>
+        </button>
+      </div>
+
+      <ng-template #templatesVazios>
+        <div class="empty-templates">
+          <p>Agrupe vários relatórios para abri-los juntos.</p>
+          <button class="btn btn-secondary btn-sm" type="button" (click)="abrirNovoTemplate()">
+            Criar template
+          </button>
+        </div>
+      </ng-template>
     </aside>
 
     <main class="workspace">
       <ng-container *ngIf="selecionado; else nenhumSelecionado">
+        <section class="card template-session" *ngIf="templateAtivo">
+          <div class="template-session-heading">
+            <div>
+              <span>Template ativo</span>
+              <strong>{{ templateAtivo.nome }}</strong>
+              <small *ngIf="templateAtivo.descricao">{{ templateAtivo.descricao }}</small>
+            </div>
+            <button class="btn btn-secondary btn-sm" type="button" (click)="fecharTemplateAtivo()">
+              Fechar template
+            </button>
+          </div>
+
+          <div class="template-tabs" role="tablist" aria-label="Relatórios do template">
+            <button
+              type="button"
+              role="tab"
+              *ngFor="let relatorio of relatoriosAbertos; trackBy: trackByRelatorioId"
+              [class.active]="selecionado?.id === relatorio.id"
+              [attr.aria-selected]="selecionado?.id === relatorio.id"
+              (click)="selecionarRelatorioTemplate(relatorio)"
+            >
+              <strong>{{ relatorio.nomeExibicao }}</strong>
+              <small>{{ relatorio.apiNome }}</small>
+            </button>
+          </div>
+        </section>
+
         <section class="card report-config">
           <div class="report-heading">
             <div>
               <span class="api-label">{{ selecionado.apiNome }}</span>
               <h2>{{ selecionado.nomeExibicao }}</h2>
-              <p>
-                {{ selecionado.descricao || 'Preencha os filtros abaixo para gerar o relatório.' }}
-              </p>
+              <p>{{ selecionado.descricao || 'Preencha os filtros abaixo para gerar o relatório.' }}</p>
             </div>
-            <button
-              class="btn btn-secondary btn-sm"
-              type="button"
-              (click)="abrirExclusao(selecionado)"
-            >
+            <button class="btn btn-secondary btn-sm" type="button" (click)="abrirExclusao(selecionado)">
               Excluir
             </button>
           </div>
 
           <div class="filter-grid" *ngIf="selecionado.filtros.length; else semFiltros">
-            <div class="field" *ngFor="let filtro of selecionado.filtros">
+            <div class="field" *ngFor="let filtro of selecionado.filtros; trackBy: trackByFiltroNome">
               <label [for]="'filtro-' + filtro.nomeFiltro">
                 {{ rotuloFiltro(filtro) }}
                 <span class="required" *ngIf="filtro.obrigatorioFiltro === 'S'">*</span>
@@ -137,6 +191,7 @@
               </small>
             </div>
           </div>
+
           <ng-template #semFiltros>
             <div class="no-filters">Esta API não possui filtros cadastrados.</div>
           </ng-template>
@@ -144,21 +199,29 @@
           <div class="report-actions">
             <div class="page-size">
               <label for="pageSize">Linhas por página</label>
-              <select id="pageSize" [(ngModel)]="tamanhoPagina" name="pageSize">
+              <select id="pageSize" [(ngModel)]="tamanhoPagina" name="pageSize" [disabled]="carregando">
                 <option [ngValue]="25">25</option>
                 <option [ngValue]="50">50</option>
                 <option [ngValue]="100">100</option>
               </select>
             </div>
-            <button
-              class="btn btn-primary btn-lg"
-              type="button"
-              [disabled]="carregando"
-              (click)="gerar(1)"
-            >
+            <button class="btn btn-primary btn-lg" type="button" [disabled]="carregando" (click)="gerar(1)">
               <span class="spinner" *ngIf="carregando"></span>
-              {{ carregando ? 'Gerando…' : 'Gerar relatório' }}
+              {{ carregando ? 'Gerando… ' + segundosGeracao + 's' : 'Gerar relatório' }}
             </button>
+          </div>
+
+          <div class="generation-status" *ngIf="carregando" aria-live="polite" aria-busy="true">
+            <div class="generation-status-copy">
+              <span class="generation-pulse" aria-hidden="true"></span>
+              <div>
+                <strong>{{ mensagemGeracao }}</strong>
+                <small>Tempo decorrido: {{ segundosGeracao }} segundo(s). Limite de espera: 120 segundos.</small>
+              </div>
+            </div>
+            <div class="generation-progress" aria-hidden="true">
+              <span></span>
+            </div>
           </div>
         </section>
 
@@ -169,45 +232,17 @@
               <p>
                 Página {{ pagina }} · {{ registros.length }} registro(s)
                 <span *ngIf="totalRegistros !== null"> · {{ totalRegistros }} no total</span>
+                <span *ngIf="duracaoUltimaConsultaMs !== null"> · {{ formatarDuracao(duracaoUltimaConsultaMs) }}</span>
               </p>
             </div>
+
             <div class="download-panel">
               <div class="download-format-group">
                 <span class="download-label">Formato</span>
                 <div class="format-selector" role="radiogroup" aria-label="Formato do arquivo">
-                  <button
-                    class="format-option"
-                    type="button"
-                    role="radio"
-                    [attr.aria-checked]="formatoSelecionado === 'csv'"
-                    [class.active]="formatoSelecionado === 'csv'"
-                    [disabled]="!!exportando"
-                    (click)="selecionarFormato('csv')"
-                  >
-                    CSV
-                  </button>
-                  <button
-                    class="format-option"
-                    type="button"
-                    role="radio"
-                    [attr.aria-checked]="formatoSelecionado === 'txt'"
-                    [class.active]="formatoSelecionado === 'txt'"
-                    [disabled]="!!exportando"
-                    (click)="selecionarFormato('txt')"
-                  >
-                    TXT
-                  </button>
-                  <button
-                    class="format-option"
-                    type="button"
-                    role="radio"
-                    [attr.aria-checked]="formatoSelecionado === 'xlsx'"
-                    [class.active]="formatoSelecionado === 'xlsx'"
-                    [disabled]="!!exportando"
-                    (click)="selecionarFormato('xlsx')"
-                  >
-                    XLSX
-                  </button>
+                  <button class="format-option" type="button" role="radio" [attr.aria-checked]="formatoSelecionado === 'csv'" [class.active]="formatoSelecionado === 'csv'" [disabled]="!!exportando" (click)="selecionarFormato('csv')">CSV</button>
+                  <button class="format-option" type="button" role="radio" [attr.aria-checked]="formatoSelecionado === 'txt'" [class.active]="formatoSelecionado === 'txt'" [disabled]="!!exportando" (click)="selecionarFormato('txt')">TXT</button>
+                  <button class="format-option" type="button" role="radio" [attr.aria-checked]="formatoSelecionado === 'xlsx'" [class.active]="formatoSelecionado === 'xlsx'" [disabled]="!!exportando" (click)="selecionarFormato('xlsx')">XLSX</button>
                 </div>
               </div>
 
@@ -226,12 +261,7 @@
                 </span>
               </label>
 
-              <button
-                class="btn btn-primary download-button"
-                type="button"
-                [disabled]="!!exportando"
-                (click)="baixar()"
-              >
+              <button class="btn btn-primary download-button" type="button" [disabled]="!!exportando" (click)="baixar()">
                 <span class="spinner" *ngIf="exportando"></span>
                 {{ exportando ? 'Preparando…' : 'Baixar relatório' }}
               </button>
@@ -242,12 +272,12 @@
             <table class="data-table report-table">
               <thead>
                 <tr>
-                  <th *ngFor="let coluna of colunas">{{ coluna }}</th>
+                  <th *ngFor="let coluna of colunas; trackBy: trackByColuna">{{ coluna }}</th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let registro of registros">
-                  <td *ngFor="let coluna of colunas" [title]="formatarValor(registro[coluna])">
+                <tr *ngFor="let registro of registros; trackBy: trackByRegistro">
+                  <td *ngFor="let coluna of colunas; trackBy: trackByColuna" [title]="formatarValor(registro[coluna])">
                     {{ formatarValor(registro[coluna]) }}
                   </td>
                 </tr>
@@ -260,21 +290,11 @@
           </ng-template>
 
           <div class="pagination" *ngIf="registros.length">
-            <button
-              class="btn btn-secondary btn-sm"
-              type="button"
-              [disabled]="pagina <= 1 || carregando"
-              (click)="paginaAnterior()"
-            >
+            <button class="btn btn-secondary btn-sm" type="button" [disabled]="pagina <= 1 || carregando" (click)="paginaAnterior()">
               ← Anterior
             </button>
             <span>Página {{ pagina }}</span>
-            <button
-              class="btn btn-secondary btn-sm"
-              type="button"
-              [disabled]="ultimaPagina || carregando"
-              (click)="proximaPagina()"
-            >
+            <button class="btn btn-secondary btn-sm" type="button" [disabled]="ultimaPagina || carregando" (click)="proximaPagina()">
               Próxima →
             </button>
           </div>
@@ -286,78 +306,56 @@
           <div class="welcome-icon">▤</div>
           <h2>Selecione ou adicione um relatório</h2>
           <p>Os filtros serão montados automaticamente com base na configuração da API do SGU.</p>
-          <button class="btn btn-primary" type="button" (click)="abrirNovo()">
-            Novo relatório
-          </button>
+          <div class="welcome-actions">
+            <button class="btn btn-primary" type="button" (click)="abrirNovo()">Novo relatório</button>
+            <button class="btn btn-secondary" type="button" (click)="abrirNovoTemplate()">Novo template</button>
+          </div>
         </section>
       </ng-template>
     </main>
   </div>
 </section>
 
+<!-- Modal de relatório -->
 <div class="modal-backdrop" *ngIf="modalNovoAberto" (click)="fecharNovo()">
-  <section
-    class="modal-card modal-large"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="novo-relatorio-titulo"
-    (click)="$event.stopPropagation()"
-  >
+  <section class="modal-card modal-large" role="dialog" aria-modal="true" aria-labelledby="novo-relatorio-titulo" (click)="$event.stopPropagation()">
     <header class="modal-header">
       <div>
         <span class="modal-kicker">Configuração</span>
         <h2 id="novo-relatorio-titulo">Novo relatório</h2>
       </div>
-      <button type="button" class="modal-close" (click)="fecharNovo()" aria-label="Fechar">
-        ×
-      </button>
+      <button type="button" class="modal-close" (click)="fecharNovo()" aria-label="Fechar">×</button>
     </header>
 
     <div class="mode-tabs">
-      <button
-        type="button"
-        [class.active]="modoCadastro === 'existente'"
-        (click)="mudarModo('existente')"
-      >
-        Buscar pelo nome
-      </button>
-      <button type="button" [class.active]="modoCadastro === 'lista'" (click)="mudarModo('lista')">
-        Escolher na lista
-      </button>
-      <button type="button" [class.active]="modoCadastro === 'nova'" (click)="mudarModo('nova')">
-        Cadastrar nova API
-      </button>
+      <button type="button" [class.active]="modoCadastro === 'existente'" (click)="mudarModo('existente')">Buscar pelo nome</button>
+      <button type="button" [class.active]="modoCadastro === 'lista'" (click)="mudarModo('lista')">Escolher na lista</button>
+      <button type="button" [class.active]="modoCadastro === 'nova'" (click)="mudarModo('nova')">Cadastrar nova API</button>
     </div>
 
     <div class="modal-alert" *ngIf="erro">{{ erro }}</div>
 
     <div class="modal-body" *ngIf="modoCadastro === 'existente'">
       <div class="field full-field">
-        <label for="apiExistente">Nome da API no SGU</label>
+        <label for="apiExistenteNome">Nome da API no SGU</label>
         <div class="inline-input">
-          <input
-            id="apiExistente"
-            name="apiExistente"
-            [(ngModel)]="novoApiNome"
-            placeholder="0090-despesa"
-          />
-          <button
-            class="btn btn-secondary"
-            type="button"
-            [disabled]="buscandoApi"
-            (click)="buscarApiExistente()"
-          >
-            {{ buscandoApi ? 'Buscando…' : 'Buscar configuração' }}
+          <input id="apiExistenteNome" name="apiExistenteNome" [(ngModel)]="novoApiNome" placeholder="0090-despesa" (keyup.enter)="buscarApiExistente()" />
+          <button class="btn btn-secondary" type="button" [disabled]="buscandoApi" (click)="buscarApiExistente()">
+            {{ buscandoApi ? 'Buscando…' : 'Buscar API' }}
           </button>
         </div>
       </div>
 
       <div class="api-preview" *ngIf="apiEncontrada">
-        <div class="preview-status">✓ API encontrada</div>
-        <strong>{{ apiEncontrada.nome }}</strong>
-        <p>{{ apiEncontrada.filtros.length }} filtro(s) cadastrado(s)</p>
-        <div class="filter-chips">
-          <span *ngFor="let filtro of apiEncontrada.filtros">
+        <div class="api-preview-header">
+          <div>
+            <span>API encontrada</span>
+            <strong>{{ apiEncontrada.nome }}</strong>
+          </div>
+          <small>{{ apiEncontrada.filtros.length }} filtro(s)</small>
+        </div>
+        <div class="filter-chips" *ngIf="apiEncontrada.filtros.length">
+          <span *ngFor="let filtro of apiEncontrada.filtros; trackBy: trackByFiltroNome">
             {{ filtro.nomeFiltro }} · {{ filtro.tipoDadoFiltro }}
             <b *ngIf="filtro.obrigatorioFiltro === 'S'">obrigatório</b>
           </span>
@@ -367,21 +365,11 @@
       <div class="two-cols" *ngIf="apiEncontrada">
         <div class="field">
           <label for="nomeExibicaoExistente">Nome para exibição</label>
-          <input
-            id="nomeExibicaoExistente"
-            name="nomeExibicaoExistente"
-            [(ngModel)]="novoNomeExibicao"
-            placeholder="Relatório de despesas"
-          />
+          <input id="nomeExibicaoExistente" name="nomeExibicaoExistente" [(ngModel)]="novoNomeExibicao" placeholder="Relatório de despesas" />
         </div>
         <div class="field">
           <label for="descricaoExistente">Descrição</label>
-          <input
-            id="descricaoExistente"
-            name="descricaoExistente"
-            [(ngModel)]="novaDescricao"
-            placeholder="Despesas por competência"
-          />
+          <input id="descricaoExistente" name="descricaoExistente" [(ngModel)]="novaDescricao" placeholder="Despesas por competência" />
         </div>
       </div>
     </div>
@@ -391,59 +379,33 @@
         <label class="search-box api-list-search">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3" />
-            <path
-              d="M10.5 10.5L14 14"
-              stroke="currentColor"
-              stroke-width="1.3"
-              stroke-linecap="round"
-            />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
           </svg>
-          <input
-            type="search"
-            name="pesquisaApis"
-            [(ngModel)]="pesquisaApis"
-            (ngModelChange)="aplicarPesquisaApis()"
-            placeholder="Pesquisar pelo nome da API"
-          />
+          <input type="search" name="pesquisaApis" [(ngModel)]="pesquisaApis" (ngModelChange)="aplicarPesquisaApis()" placeholder="Pesquisar pelo nome da API" />
         </label>
-        <button
-          class="btn btn-secondary"
-          type="button"
-          [disabled]="carregandoListaApis"
-          (click)="carregarApisCadastradas(true)"
-        >
+        <button class="btn btn-secondary" type="button" [disabled]="carregandoListaApis" (click)="carregarApisCadastradas(true)">
           {{ carregandoListaApis ? 'Atualizando…' : 'Atualizar lista' }}
         </button>
       </div>
 
       <div class="api-list-summary" *ngIf="listaApisCarregada && !carregandoListaApis">
         <span>{{ apisDisponiveisFiltradas.length }} API(s) exibida(s)</span>
-        <strong *ngIf="quantidadeApisSelecionadas"
-          >{{ quantidadeApisSelecionadas }} selecionada(s)</strong
-        >
+        <strong *ngIf="quantidadeApisSelecionadas">{{ quantidadeApisSelecionadas }} selecionada(s)</strong>
       </div>
 
       <div class="api-list-loading" *ngIf="carregandoListaApis">
-        <span class="spinner"></span>
+        <span class="spinner spinner-green"></span>
         Buscando as APIs cadastradas no SGU…
       </div>
 
-      <div
-        class="api-selection-list"
-        *ngIf="!carregandoListaApis && apisDisponiveisFiltradas.length"
-      >
+      <div class="api-selection-list" *ngIf="!carregandoListaApis && apisDisponiveisFiltradas.length">
         <label
           class="api-selection-card"
-          *ngFor="let api of apisDisponiveisFiltradas; let i = index"
+          *ngFor="let api of apisDisponiveisFiltradas; let i = index; trackBy: trackByApiNome"
           [class.selected]="apisSelecionadas[api.nome]"
           [class.already-added]="apiJaAdicionada(api.nome)"
         >
-          <input
-            type="checkbox"
-            [name]="'apiSelecionada-' + i"
-            [(ngModel)]="apisSelecionadas[api.nome]"
-            [disabled]="apiJaAdicionada(api.nome)"
-          />
+          <input type="checkbox" [name]="'apiSelecionada-' + i" [(ngModel)]="apisSelecionadas[api.nome]" [disabled]="apiJaAdicionada(api.nome)" />
           <span class="api-selection-copy">
             <span class="api-selection-title">
               <strong>{{ api.nome }}</strong>
@@ -454,18 +416,13 @@
               <span *ngIf="api.ordenacao"> · Ordenação: {{ api.ordenacao }}</span>
             </span>
             <span class="filter-chips compact" *ngIf="api.filtros.length">
-              <span *ngFor="let filtro of api.filtros"
-                >{{ filtro.nomeFiltro }} · {{ filtro.tipoDadoFiltro }}</span
-              >
+              <span *ngFor="let filtro of api.filtros; trackBy: trackByFiltroNome">{{ filtro.nomeFiltro }} · {{ filtro.tipoDadoFiltro }}</span>
             </span>
           </span>
         </label>
       </div>
 
-      <div
-        class="api-list-empty"
-        *ngIf="!carregandoListaApis && listaApisCarregada && !apisDisponiveisFiltradas.length"
-      >
+      <div class="api-list-empty" *ngIf="!carregandoListaApis && listaApisCarregada && !apisDisponiveisFiltradas.length">
         <strong>Nenhuma API encontrada</strong>
         <p>Altere a pesquisa ou atualize a lista.</p>
       </div>
@@ -475,79 +432,45 @@
       <div class="two-cols">
         <div class="field">
           <label for="novaApiNome">Nome da API *</label>
-          <input
-            id="novaApiNome"
-            name="novaApiNome"
-            [(ngModel)]="novoApiNome"
-            placeholder="0090-nome-relatorio"
-          />
+          <input id="novaApiNome" name="novaApiNome" [(ngModel)]="novoApiNome" placeholder="0090-nome-relatorio" />
         </div>
         <div class="field">
           <label for="novoNomeExibicao">Nome para exibição *</label>
-          <input
-            id="novoNomeExibicao"
-            name="novoNomeExibicao"
-            [(ngModel)]="novoNomeExibicao"
-            placeholder="Nome do relatório"
-          />
+          <input id="novoNomeExibicao" name="novoNomeExibicao" [(ngModel)]="novoNomeExibicao" placeholder="Nome do relatório" />
         </div>
       </div>
 
       <div class="field full-field">
         <label for="novaDescricao">Descrição</label>
-        <input
-          id="novaDescricao"
-          name="novaDescricao"
-          [(ngModel)]="novaDescricao"
-          placeholder="Explique o conteúdo deste relatório"
-        />
+        <input id="novaDescricao" name="novaDescricao" [(ngModel)]="novaDescricao" placeholder="Explique o conteúdo deste relatório" />
       </div>
 
       <div class="field full-field">
         <label for="consultaSql">Consulta SQL *</label>
-        <textarea
-          id="consultaSql"
-          name="consultaSql"
-          rows="9"
-          [(ngModel)]="novaConsultaSql"
-          placeholder="SELECT ... FROM ... WHERE 1 = 1 /*FILTROS*/"
-        ></textarea>
+        <textarea id="consultaSql" name="consultaSql" rows="9" [(ngModel)]="novaConsultaSql" placeholder="SELECT ... FROM ... WHERE 1 = 1 /*FILTROS*/"></textarea>
         <small>Use WHERE 1 = 1 e /*FILTROS*/ no ponto onde os filtros devem entrar.</small>
       </div>
 
       <div class="field full-field">
         <label for="novaOrdenacao">Ordenação padrão</label>
-        <input
-          id="novaOrdenacao"
-          name="novaOrdenacao"
-          [(ngModel)]="novaOrdenacao"
-          placeholder="Opcional"
-        />
+        <input id="novaOrdenacao" name="novaOrdenacao" [(ngModel)]="novaOrdenacao" placeholder="Opcional" />
       </div>
 
       <div class="filter-builder">
         <div class="builder-title">
           <div>
             <h3>Filtros</h3>
-            <p>O conteúdo deve começar com <code>and </code> em minúsculo.</p>
+            <p>O conteúdo deve começar com <code>and </code> e a variável deve ter exatamente o mesmo nome do filtro.</p>
           </div>
-          <button class="btn btn-secondary btn-sm" type="button" (click)="adicionarFiltro()">
-            ＋ Adicionar filtro
-          </button>
+          <button class="btn btn-secondary btn-sm" type="button" (click)="adicionarFiltro()">＋ Adicionar filtro</button>
         </div>
 
         <article class="filter-row" *ngFor="let filtro of novosFiltros; let i = index">
           <div class="filter-row-header">
             <strong>Filtro {{ i + 1 }}</strong>
-            <button
-              type="button"
-              class="link-danger"
-              [disabled]="novosFiltros.length === 1"
-              (click)="removerFiltro(i)"
-            >
-              Remover
-            </button>
+            <button type="button" class="link-danger" [disabled]="novosFiltros.length === 1" (click)="removerFiltro(i)">Remover</button>
           </div>
+
           <div class="filter-fields">
             <div class="field">
               <label [for]="'nomeFiltro-' + i">Nome *</label>
@@ -555,50 +478,43 @@
                 [id]="'nomeFiltro-' + i"
                 [name]="'nomeFiltro-' + i"
                 [(ngModel)]="novosFiltros[i].nomeFiltro"
+                [class.input-invalid]="!!erroVariavelFiltro(novosFiltros[i])"
                 placeholder="competencia"
               />
             </div>
+
             <div class="field">
               <label [for]="'tipoFiltro-' + i">Tipo *</label>
-              <input
-                [id]="'tipoFiltro-' + i"
-                [name]="'tipoFiltro-' + i"
-                [(ngModel)]="novosFiltros[i].tipoDadoFiltro"
-                list="tipos-filtro"
-                placeholder="NUMBER"
-              />
+              <input [id]="'tipoFiltro-' + i" [name]="'tipoFiltro-' + i" [(ngModel)]="novosFiltros[i].tipoDadoFiltro" list="tipos-filtro" placeholder="NUMBER" />
             </div>
+
             <div class="field field-wide">
               <label [for]="'conteudoFiltro-' + i">Conteúdo SQL *</label>
               <input
                 [id]="'conteudoFiltro-' + i"
                 [name]="'conteudoFiltro-' + i"
                 [(ngModel)]="novosFiltros[i].conteudoFiltro"
+                [class.input-invalid]="!!erroVariavelFiltro(novosFiltros[i])"
                 placeholder="and G.GUIA_NRO_COMPET = :competencia"
               />
+              <small class="field-error" *ngIf="erroVariavelFiltro(novosFiltros[i]) as erroBind">{{ erroBind }}</small>
             </div>
+
             <div class="field">
               <label [for]="'mascaraFiltro-' + i">Máscara</label>
-              <input
-                [id]="'mascaraFiltro-' + i"
-                [name]="'mascaraFiltro-' + i"
-                [(ngModel)]="novosFiltros[i].mascaraFiltro"
-                placeholder="DD/MM/YYYY"
-              />
+              <input [id]="'mascaraFiltro-' + i" [name]="'mascaraFiltro-' + i" [(ngModel)]="novosFiltros[i].mascaraFiltro" placeholder="DD/MM/YYYY" />
             </div>
+
             <div class="field">
               <label [for]="'obrigatorioFiltro-' + i">Obrigatório</label>
-              <select
-                [id]="'obrigatorioFiltro-' + i"
-                [name]="'obrigatorioFiltro-' + i"
-                [(ngModel)]="novosFiltros[i].obrigatorioFiltro"
-              >
+              <select [id]="'obrigatorioFiltro-' + i" [name]="'obrigatorioFiltro-' + i" [(ngModel)]="novosFiltros[i].obrigatorioFiltro">
                 <option value="N">Não</option>
                 <option value="S">Sim</option>
               </select>
             </div>
           </div>
         </article>
+
         <datalist id="tipos-filtro">
           <option value="NUMBER"></option>
           <option value="DATE"></option>
@@ -609,88 +525,100 @@
 
     <footer class="modal-footer">
       <button class="btn btn-secondary" type="button" (click)="fecharNovo()">Cancelar</button>
-      <button
-        *ngIf="modoCadastro === 'existente'"
-        class="btn btn-primary"
-        type="button"
-        [disabled]="!apiEncontrada"
-        (click)="salvarApiExistente()"
-      >
-        Adicionar relatório
+      <button *ngIf="modoCadastro === 'existente'" class="btn btn-primary" type="button" [disabled]="!apiEncontrada" (click)="salvarApiExistente()">Adicionar relatório</button>
+      <button *ngIf="modoCadastro === 'lista'" class="btn btn-primary" type="button" [disabled]="carregandoListaApis || quantidadeApisSelecionadas === 0" (click)="adicionarApisSelecionadas()">
+        {{ quantidadeApisSelecionadas === 0 ? 'Selecione as APIs' : 'Adicionar ' + quantidadeApisSelecionadas + (quantidadeApisSelecionadas === 1 ? ' relatório' : ' relatórios') }}
       </button>
-      <button
-        *ngIf="modoCadastro === 'lista'"
-        class="btn btn-primary"
-        type="button"
-        [disabled]="carregandoListaApis || quantidadeApisSelecionadas === 0"
-        (click)="adicionarApisSelecionadas()"
-      >
-        {{
-          quantidadeApisSelecionadas === 0
-            ? 'Selecione as APIs'
-            : 'Adicionar ' +
-              quantidadeApisSelecionadas +
-              (quantidadeApisSelecionadas === 1 ? ' relatório' : ' relatórios')
-        }}
-      </button>
-      <button
-        *ngIf="modoCadastro === 'nova'"
-        class="btn btn-primary"
-        type="button"
-        [disabled]="salvandoApi"
-        (click)="criarNovaApi()"
-      >
+      <button *ngIf="modoCadastro === 'nova'" class="btn btn-primary" type="button" [disabled]="salvandoApi" (click)="criarNovaApi()">
         {{ salvandoApi ? 'Cadastrando…' : 'Cadastrar API e adicionar' }}
       </button>
     </footer>
   </section>
 </div>
 
+<!-- Modal de template -->
+<div class="modal-backdrop" *ngIf="modalTemplateAberto" (click)="fecharNovoTemplate()">
+  <section class="modal-card template-modal" role="dialog" aria-modal="true" aria-labelledby="novo-template-titulo" (click)="$event.stopPropagation()">
+    <header class="modal-header">
+      <div>
+        <span class="modal-kicker">Organização</span>
+        <h2 id="novo-template-titulo">Novo template de relatórios</h2>
+      </div>
+      <button type="button" class="modal-close" (click)="fecharNovoTemplate()" aria-label="Fechar">×</button>
+    </header>
+
+    <div class="modal-body">
+      <div class="two-cols">
+        <div class="field">
+          <label for="novoTemplateNome">Nome do template *</label>
+          <input id="novoTemplateNome" name="novoTemplateNome" [(ngModel)]="novoTemplateNome" placeholder="Fechamento mensal" />
+        </div>
+        <div class="field">
+          <label for="novoTemplateDescricao">Descrição</label>
+          <input id="novoTemplateDescricao" name="novoTemplateDescricao" [(ngModel)]="novoTemplateDescricao" placeholder="Relatórios usados no fechamento" />
+        </div>
+      </div>
+
+      <div class="template-builder-heading">
+        <div>
+          <h3>Selecione os relatórios</h3>
+          <p>Ao usar o template, os relatórios selecionados serão abertos em abas.</p>
+        </div>
+        <strong>{{ quantidadeRelatoriosTemplateSelecionados }} selecionado(s)</strong>
+      </div>
+
+      <div class="template-report-selection">
+        <label
+          class="template-report-option"
+          *ngFor="let relatorio of relatorios; let i = index; trackBy: trackByRelatorioId"
+          [class.selected]="relatoriosTemplateSelecionados[relatorio.id]"
+        >
+          <input type="checkbox" [name]="'template-relatorio-' + i" [(ngModel)]="relatoriosTemplateSelecionados[relatorio.id]" />
+          <span>
+            <strong>{{ relatorio.nomeExibicao }}</strong>
+            <small>{{ relatorio.apiNome }}</small>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <footer class="modal-footer">
+      <button class="btn btn-secondary" type="button" (click)="fecharNovoTemplate()">Cancelar</button>
+      <button class="btn btn-primary" type="button" [disabled]="quantidadeRelatoriosTemplateSelecionados === 0" (click)="salvarTemplate()">
+        Criar template
+      </button>
+    </footer>
+  </section>
+</div>
+
+<!-- Modal de exclusão de relatório -->
 <div class="modal-backdrop" *ngIf="modalExcluirAberto" (click)="fecharExclusao()">
-  <section
-    class="modal-card delete-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="excluir-relatorio-titulo"
-    (click)="$event.stopPropagation()"
-  >
+  <section class="modal-card delete-modal" role="dialog" aria-modal="true" aria-labelledby="excluir-relatorio-titulo" (click)="$event.stopPropagation()">
     <header class="modal-header">
       <div>
         <span class="modal-kicker danger">Exclusão</span>
         <h2 id="excluir-relatorio-titulo">Excluir relatório</h2>
       </div>
-      <button type="button" class="modal-close" (click)="fecharExclusao()" aria-label="Fechar">
-        ×
-      </button>
+      <button type="button" class="modal-close" (click)="fecharExclusao()" aria-label="Fechar">×</button>
     </header>
+
     <div class="modal-body" *ngIf="relatorioParaExcluir">
-      <p>
-        O relatório <strong>{{ relatorioParaExcluir.nomeExibicao }}</strong> será removido desta
-        página.
-      </p>
+      <p>O relatório <strong>{{ relatorioParaExcluir.nomeExibicao }}</strong> será removido desta página.</p>
       <label class="danger-option">
         <input type="checkbox" name="apagarSgu" [(ngModel)]="apagarTambemNoSgu" />
         <span>
           <strong>Apagar também a API no SGU</strong>
-          <small
-            >Esta opção chama o endpoint apaga_query_api para
-            {{ relatorioParaExcluir.apiNome }}.</small
-          >
+          <small>Esta opção chama o endpoint apaga_query_api para {{ relatorioParaExcluir.apiNome }}.</small>
         </span>
       </label>
       <div class="destructive-warning" *ngIf="apagarTambemNoSgu">
-        Atenção: a consulta deixará de existir no SGU e não poderá mais ser executada por outros
-        sistemas.
+        Atenção: a consulta deixará de existir no SGU e não poderá mais ser executada por outros sistemas.
       </div>
     </div>
+
     <footer class="modal-footer">
       <button class="btn btn-secondary" type="button" (click)="fecharExclusao()">Cancelar</button>
-      <button
-        class="btn btn-danger"
-        type="button"
-        [disabled]="excluindo"
-        (click)="confirmarExclusao()"
-      >
+      <button class="btn btn-danger" type="button" [disabled]="excluindo" (click)="confirmarExclusao()">
         {{ excluindo ? 'Excluindo…' : 'Confirmar exclusão' }}
       </button>
     </footer>

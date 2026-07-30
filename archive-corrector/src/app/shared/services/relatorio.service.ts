@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 import {
   FormatoExportacao,
   RelatorioCatalogo,
+  RelatorioTemplate,
   SguApiDefinicao,
   SguListaResponse,
   SguResultado,
@@ -15,24 +16,27 @@ import {
 export class RelatorioService {
   private readonly baseUrl = `${environment.apiUrl}/relatorios`;
   private readonly storageKey = 'unimed-tools.relatorios.v1';
+  private readonly templateStorageKey = 'unimed-tools.relatorios.templates.v1';
 
   constructor(private readonly http: HttpClient) {}
 
   listarCatalogo(): RelatorioCatalogo[] {
-    if (typeof localStorage === 'undefined') return [];
-
-    try {
-      const salvo = localStorage.getItem(this.storageKey);
-      return salvo ? (JSON.parse(salvo) as RelatorioCatalogo[]) : [];
-    } catch {
-      return [];
-    }
+    return this.lerLocalStorage<RelatorioCatalogo[]>(this.storageKey, []);
   }
 
   salvarCatalogo(relatorios: RelatorioCatalogo[]): void {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(this.storageKey, JSON.stringify(relatorios));
-    }
+    this.salvarLocalStorage(this.storageKey, relatorios);
+  }
+
+  listarTemplates(): RelatorioTemplate[] {
+    return this.lerLocalStorage<RelatorioTemplate[]>(
+      this.templateStorageKey,
+      []
+    );
+  }
+
+  salvarTemplates(templates: RelatorioTemplate[]): void {
+    this.salvarLocalStorage(this.templateStorageKey, templates);
   }
 
   buscarApi(nome: string): Observable<SguApiDefinicao> {
@@ -108,5 +112,21 @@ export class RelatorioService {
       { filtros, nomeArquivo },
       { responseType: 'blob' }
     );
+  }
+
+  private lerLocalStorage<T>(chave: string, padrao: T): T {
+    if (typeof localStorage === 'undefined') return padrao;
+
+    try {
+      const salvo = localStorage.getItem(chave);
+      return salvo ? (JSON.parse(salvo) as T) : padrao;
+    } catch {
+      return padrao;
+    }
+  }
+
+  private salvarLocalStorage(chave: string, valor: unknown): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(chave, JSON.stringify(valor));
   }
 }

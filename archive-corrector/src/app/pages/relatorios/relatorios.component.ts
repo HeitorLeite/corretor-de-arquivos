@@ -1,11 +1,18 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, timeout } from 'rxjs';
 
 import {
   FormatoExportacao,
   RelatorioCatalogo,
+  RelatorioTemplate,
   SguApiDefinicao,
   SguFiltro,
   SguResultado,
@@ -21,7 +28,7 @@ type ModoCadastro = 'existente' | 'lista' | 'nova';
   templateUrl: './relatorios.component.html',
   styleUrls: ['./relatorios.component.scss'],
 })
-export class RelatoriosComponent implements OnInit {
+export class RelatoriosComponent implements OnInit, OnDestroy {
   relatorios: RelatorioCatalogo[] = [];
   relatoriosFiltrados: RelatorioCatalogo[] = [];
   selecionado: RelatorioCatalogo | null = null;
@@ -36,6 +43,10 @@ export class RelatoriosComponent implements OnInit {
   totalRegistros: number | null = null;
 
   carregando = false;
+  segundosGeracao = 0;
+  mensagemGeracao = '';
+  duracaoUltimaConsultaMs: number | null = null;
+
   exportando: FormatoExportacao | null = null;
   formatoSelecionado: FormatoExportacao = 'xlsx';
   nomeArquivoDownload = '';
@@ -61,20 +72,49 @@ export class RelatoriosComponent implements OnInit {
   apisSelecionadas: Record<string, boolean> = {};
   pesquisaApis = '';
 
+  templates: RelatorioTemplate[] = [];
+  templateAtivo: RelatorioTemplate | null = null;
+  relatoriosAbertos: RelatorioCatalogo[] = [];
+  modalTemplateAberto = false;
+  novoTemplateNome = '';
+  novoTemplateDescricao = '';
+  relatoriosTemplateSelecionados: Record<string, boolean> = {};
+
   modalExcluirAberto = false;
   relatorioParaExcluir: RelatorioCatalogo | null = null;
   apagarTambemNoSgu = false;
   excluindo = false;
 
-  constructor(private readonly relatorioService: RelatorioService) {}
+  private intervaloGeracao?: ReturnType<typeof setInterval>;
+  private inicioGeracao = 0;
+  private readonly timeoutGeracaoMs = 120_000;
+  private readonly timeoutExportacaoMs = 600_000;
+  private readonly valoresFiltroPorRelatorio: Record<
+    string,
+    Record<string, string | number>
+  > = {};
+
+  constructor(
+    private readonly relatorioService: RelatorioService,
+    private readonly cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {
     this.relatorios = this.relatorioService.listarCatalogo();
+    this.templates = this.normalizarTemplates(
+      this.relatorioService.listarTemplates()
+    );
+    this.persistirTemplates();
     this.aplicarPesquisa();
 
     if (this.relatorios.length) {
       this.selecionar(this.relatorios[0]);
     }
+  }
+
+  ngOnDestroy(): void {
+    this.salvarFiltrosSelecionadoAtual();
+    this.pararCronometroGeracao();
   }
 
   aplicarPesquisa(): void {
@@ -89,16 +129,30 @@ export class RelatoriosComponent implements OnInit {
         );
   }
 
-  selecionar(relatorio: RelatorioCatalogo): void {
-    this.selecionado = relatorio;
-    this.valoresFiltro = {};
+  selecionar(
+    relatorio: RelatorioCatalogo,
+    manterTemplateAtivo = false
+  ): void {
+    this.salvarFiltrosSelecionadoAtual();
 
-    relatorio.filtros.forEach(filtro => {
-      this.valoresFiltro[filtro.nomeFiltro] = '';
-    });
+    if (!manterTemplateAtivo) {
+      this.templateAtivo = null;
+      this.relatoriosAbertos = [];
+    }
+
+    this.selecionado = relatorio;
+    const valoresSalvos = this.valoresFiltroPorRelatorio[relatorio.id];
+
+    this.valoresFiltro = valoresSalvos
+      ? { ...valoresSalvos }
+      : this.criarValoresFiltroVazios(relatorio);
 
     this.nomeArquivoDownload = this.nomeArquivo(relatorio.nomeExibicao);
     this.limparResultado();
+  }
+
+  selecionarRelatorioTemplate(relatorio: RelatorioCatalogo): void {
+    this.selecionar(relatorio, true);
   }
 
   limparResultado(): void {
@@ -107,6 +161,7 @@ export class RelatoriosComponent implements OnInit {
     this.pagina = 1;
     this.ultimaPagina = false;
     this.totalRegistros = null;
+    this.duracaoUltimaConsultaMs = null;
     this.erro = '';
     this.sucesso = '';
   }
@@ -160,7 +215,10 @@ export class RelatoriosComponent implements OnInit {
 
     this.relatorioService
       .buscarApi(nome)
-      .pipe(finalize(() => (this.buscandoApi = false)))
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.buscandoApi = false))
+      )
       .subscribe({
         next: api => {
           this.apiEncontrada = api;
@@ -200,7 +258,10 @@ export class RelatoriosComponent implements OnInit {
 
     this.relatorioService
       .listarApis()
-      .pipe(finalize(() => (this.carregandoListaApis = false)))
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.carregandoListaApis = false))
+      )
       .subscribe({
         next: apis => {
           this.apisDisponiveis = this.normalizarListaApis(apis);
@@ -235,13 +296,17 @@ export class RelatoriosComponent implements OnInit {
 
   get quantidadeApisSelecionadas(): number {
     return this.apisDisponiveis.filter(
-      api => this.apisSelecionadas[api.nome] && !this.apiJaAdicionada(api.nome)
+      api =>
+        this.apisSelecionadas[api.nome] &&
+        !this.apiJaAdicionada(api.nome)
     ).length;
   }
 
   adicionarApisSelecionadas(): void {
     const selecionadas = this.apisDisponiveis.filter(
-      api => this.apisSelecionadas[api.nome] && !this.apiJaAdicionada(api.nome)
+      api =>
+        this.apisSelecionadas[api.nome] &&
+        !this.apiJaAdicionada(api.nome)
     );
 
     if (!selecionadas.length) {
@@ -282,6 +347,15 @@ export class RelatoriosComponent implements OnInit {
     }
   }
 
+  erroVariavelFiltro(filtro: SguFiltro): string {
+    const nome = filtro.nomeFiltro.trim();
+    const conteudo = filtro.conteudoFiltro.trim();
+
+    if (!nome || !conteudo || conteudo === 'and') return '';
+
+    return this.validarCorrespondenciaBind(filtro);
+  }
+
   criarNovaApi(): void {
     const definicao: SguApiDefinicao = {
       nome: this.novoApiNome.trim(),
@@ -308,7 +382,10 @@ export class RelatoriosComponent implements OnInit {
 
     this.relatorioService
       .criarApi(definicao)
-      .pipe(finalize(() => (this.salvandoApi = false)))
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.salvandoApi = false))
+      )
       .subscribe({
         next: () => {
           this.adicionarAoCatalogo(definicao);
@@ -328,51 +405,75 @@ export class RelatoriosComponent implements OnInit {
   gerar(pagina = 1): void {
     if (!this.selecionado || this.carregando) return;
 
-    const obrigatorioVazio = this.selecionado.filtros.find(
-      filtro =>
-        filtro.obrigatorioFiltro === 'S' &&
-        String(this.valoresFiltro[filtro.nomeFiltro] ?? '').trim() === ''
-    );
+    const erroFiltros = this.validarFiltrosExecucao();
 
-    if (obrigatorioVazio) {
-      this.erro = `Preencha o filtro obrigatório “${this.rotuloFiltro(
-        obrigatorioVazio
-      )}”.`;
+    if (erroFiltros) {
+      this.erro = erroFiltros;
       return;
     }
 
+    this.salvarFiltrosSelecionadoAtual();
+
+    const paginaSolicitada = Math.max(1, pagina);
     const parametros = this.montarParametros(true);
-    parametros['page'] = pagina;
+    parametros['page'] = paginaSolicitada;
     parametros['size'] = this.tamanhoPagina;
 
-    this.carregando = true;
-    this.erro = '';
-    this.sucesso = '';
+    this.iniciarGeracao();
+    this.cdr.detectChanges();
 
-    this.relatorioService
-      .executar(this.selecionado.apiNome, parametros)
-      .pipe(finalize(() => (this.carregando = false)))
-      .subscribe({
-        next: resposta => {
-          this.aplicarResultado(resposta, pagina);
-        },
-        error: err => {
-          this.erro = this.mensagemErro(
-            err,
-            'Não foi possível gerar o relatório.'
-          );
-        },
-      });
+    // Aguarda um ciclo do navegador para que a barra de carregamento apareça
+    // imediatamente, antes da chamada HTTP.
+    setTimeout(() => {
+      if (!this.carregando || !this.selecionado) return;
+
+      const apiNome = this.selecionado.apiNome;
+
+      this.relatorioService
+        .executar(apiNome, parametros)
+        .pipe(
+          timeout(this.timeoutGeracaoMs),
+          finalize(() => this.finalizarGeracao())
+        )
+        .subscribe({
+          next: resposta => {
+            try {
+              const duracao = performance.now() - this.inicioGeracao;
+              this.aplicarResultado(
+                resposta,
+                paginaSolicitada,
+                duracao
+              );
+            } catch (erroProcessamento) {
+              console.error(
+                'Erro ao montar a tabela do relatório:',
+                erroProcessamento
+              );
+              this.registros = [];
+              this.colunas = [];
+              this.erro =
+                'A API respondeu, mas ocorreu um erro ao montar a tabela do relatório.';
+            }
+          },
+          error: err => {
+            console.error('Erro ao gerar relatório:', err);
+            this.erro = this.mensagemErro(
+              err,
+              'Não foi possível gerar o relatório.'
+            );
+          },
+        });
+    }, 0);
   }
 
   paginaAnterior(): void {
-    if (this.pagina > 1) {
+    if (this.pagina > 1 && !this.carregando) {
       this.gerar(this.pagina - 1);
     }
   }
 
   proximaPagina(): void {
-    if (!this.ultimaPagina) {
+    if (!this.ultimaPagina && !this.carregando) {
       this.gerar(this.pagina + 1);
     }
   }
@@ -386,18 +487,14 @@ export class RelatoriosComponent implements OnInit {
   baixar(): void {
     if (!this.selecionado || this.exportando) return;
 
-    const obrigatorioVazio = this.selecionado.filtros.find(
-      filtro =>
-        filtro.obrigatorioFiltro === 'S' &&
-        String(this.valoresFiltro[filtro.nomeFiltro] ?? '').trim() === ''
-    );
+    const erroFiltros = this.validarFiltrosExecucao();
 
-    if (obrigatorioVazio) {
-      this.erro = `Preencha o filtro obrigatório “${this.rotuloFiltro(
-        obrigatorioVazio
-      )}”.`;
+    if (erroFiltros) {
+      this.erro = erroFiltros;
       return;
     }
+
+    this.salvarFiltrosSelecionadoAtual();
 
     const formato = this.formatoSelecionado;
     const nomeArquivo = this.nomeArquivoEscolhido();
@@ -413,6 +510,10 @@ export class RelatoriosComponent implements OnInit {
         this.montarParametros(false),
         nomeArquivo
       )
+      .pipe(
+        timeout(this.timeoutExportacaoMs),
+        finalize(() => (this.exportando = null))
+      )
       .subscribe({
         next: blob => {
           const url = URL.createObjectURL(blob);
@@ -425,7 +526,6 @@ export class RelatoriosComponent implements OnInit {
           document.body.removeChild(link);
           setTimeout(() => URL.revokeObjectURL(url), 0);
 
-          this.exportando = null;
           this.sucesso = `Download preparado: ${nomeArquivo}.${formato}`;
         },
         error: async err => {
@@ -433,12 +533,136 @@ export class RelatoriosComponent implements OnInit {
             err,
             'Não foi possível exportar o relatório.'
           );
-          this.exportando = null;
         },
       });
   }
 
-  abrirExclusao(relatorio: RelatorioCatalogo, evento?: Event): void {
+  abrirNovoTemplate(): void {
+    if (!this.relatorios.length) {
+      this.erro =
+        'Adicione pelo menos um relatório antes de criar um template.';
+      return;
+    }
+
+    this.novoTemplateNome = '';
+    this.novoTemplateDescricao = '';
+    this.relatoriosTemplateSelecionados = {};
+    this.modalTemplateAberto = true;
+    this.erro = '';
+  }
+
+  fecharNovoTemplate(): void {
+    this.modalTemplateAberto = false;
+  }
+
+  get quantidadeRelatoriosTemplateSelecionados(): number {
+    return this.relatorios.filter(
+      relatorio => this.relatoriosTemplateSelecionados[relatorio.id]
+    ).length;
+  }
+
+  salvarTemplate(): void {
+    const nome = this.novoTemplateNome.trim();
+    const descricao = this.novoTemplateDescricao.trim();
+    const relatorioIds = this.relatorios
+      .filter(relatorio =>
+        Boolean(this.relatoriosTemplateSelecionados[relatorio.id])
+      )
+      .map(relatorio => relatorio.id);
+
+    if (!nome) {
+      this.erro = 'Informe um nome para o template.';
+      return;
+    }
+
+    if (!relatorioIds.length) {
+      this.erro = 'Selecione pelo menos um relatório para o template.';
+      return;
+    }
+
+    const template: RelatorioTemplate = {
+      id: this.gerarId(),
+      nome,
+      descricao,
+      relatorioIds,
+      criadoEm: new Date().toISOString(),
+    };
+
+    this.templates = [...this.templates, template];
+    this.persistirTemplates();
+    this.modalTemplateAberto = false;
+    this.usarTemplate(template);
+    this.sucesso = `O template “${template.nome}” foi criado.`;
+  }
+
+  usarTemplate(
+    template: RelatorioTemplate,
+    evento?: Event
+  ): void {
+    evento?.stopPropagation();
+
+    const relatorios = template.relatorioIds
+      .map(id => this.relatorios.find(relatorio => relatorio.id === id))
+      .filter(
+        (relatorio): relatorio is RelatorioCatalogo => Boolean(relatorio)
+      );
+
+    if (!relatorios.length) {
+      this.erro =
+        'Nenhum dos relatórios deste template está disponível no catálogo.';
+      return;
+    }
+
+    this.templateAtivo = template;
+    this.relatoriosAbertos = relatorios;
+    this.selecionar(relatorios[0], true);
+  }
+
+  fecharTemplateAtivo(): void {
+    this.templateAtivo = null;
+    this.relatoriosAbertos = [];
+  }
+
+  excluirTemplate(
+    template: RelatorioTemplate,
+    evento?: Event
+  ): void {
+    evento?.stopPropagation();
+
+    const confirmar =
+      typeof window === 'undefined' ||
+      window.confirm(`Excluir o template “${template.nome}”?`);
+
+    if (!confirmar) return;
+
+    this.templates = this.templates.filter(item => item.id !== template.id);
+    this.persistirTemplates();
+
+    if (this.templateAtivo?.id === template.id) {
+      this.fecharTemplateAtivo();
+    }
+
+    this.sucesso = `O template “${template.nome}” foi excluído.`;
+  }
+
+  resumoTemplate(template: RelatorioTemplate): string {
+    const nomes = template.relatorioIds
+      .map(id => this.relatorios.find(relatorio => relatorio.id === id))
+      .filter(
+        (relatorio): relatorio is RelatorioCatalogo => Boolean(relatorio)
+      )
+      .map(relatorio => relatorio.nomeExibicao);
+
+    if (!nomes.length) return 'Nenhum relatório disponível';
+    if (nomes.length <= 2) return nomes.join(' · ');
+
+    return `${nomes.slice(0, 2).join(' · ')} +${nomes.length - 2}`;
+  }
+
+  abrirExclusao(
+    relatorio: RelatorioCatalogo,
+    evento?: Event
+  ): void {
     evento?.stopPropagation();
     this.relatorioParaExcluir = relatorio;
     this.apagarTambemNoSgu = false;
@@ -465,7 +689,10 @@ export class RelatoriosComponent implements OnInit {
 
     this.relatorioService
       .apagarApi(this.relatorioParaExcluir.apiNome)
-      .pipe(finalize(() => (this.excluindo = false)))
+      .pipe(
+        timeout(this.timeoutGeracaoMs),
+        finalize(() => (this.excluindo = false))
+      )
       .subscribe({
         next: () => {
           this.removerDoCatalogo(this.relatorioParaExcluir!);
@@ -507,26 +734,137 @@ export class RelatoriosComponent implements OnInit {
     return String(valor);
   }
 
-  private aplicarResultado(resposta: SguResultado, pagina: number): void {
-    this.registros = Array.isArray(resposta.content) ? resposta.content : [];
-    this.colunas = this.registros.length
-      ? Object.keys(this.registros[0])
-      : [];
-    this.pagina = pagina;
-    this.ultimaPagina =
-      resposta.last === true || this.registros.length < this.tamanhoPagina;
+  formatarDuracao(ms: number | null): string {
+    if (ms === null || !Number.isFinite(ms)) return '';
 
-    const total = Number(
-      resposta.totalElements ?? resposta.numberOfElements
-    );
-
-    this.totalRegistros = Number.isFinite(total) ? total : null;
-    this.sucesso = this.registros.length
-      ? `${this.registros.length} registro(s) carregado(s) nesta página.`
-      : 'Nenhum registro encontrado para os filtros informados.';
+    if (ms < 1000) return `${Math.round(ms)} ms`;
+    return `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
   }
 
-  private montarParametros(omitirVazios: boolean): Record<string, unknown> {
+  trackByRelatorioId(
+    _indice: number,
+    relatorio: RelatorioCatalogo
+  ): string {
+    return relatorio.id;
+  }
+
+  trackByTemplateId(
+    _indice: number,
+    template: RelatorioTemplate
+  ): string {
+    return template.id;
+  }
+
+  trackByApiNome(
+    _indice: number,
+    api: SguApiDefinicao
+  ): string {
+    return api.nome;
+  }
+
+  trackByFiltroNome(_indice: number, filtro: SguFiltro): string {
+    return filtro.nomeFiltro;
+  }
+
+  trackByColuna(_indice: number, coluna: string): string {
+    return coluna;
+  }
+
+  trackByRegistro(indice: number): number {
+    return indice;
+  }
+
+  private aplicarResultado(
+    resposta: SguResultado,
+    pagina: number,
+    duracaoMs: number
+  ): void {
+    const respostaGenerica = resposta as any;
+
+    const conteudo = Array.isArray(respostaGenerica)
+      ? respostaGenerica
+      : Array.isArray(respostaGenerica?.content)
+        ? respostaGenerica.content
+        : Array.isArray(respostaGenerica?.data?.content)
+          ? respostaGenerica.data.content
+          : [];
+
+    this.registros = conteudo.filter(
+      (item: unknown) =>
+        item !== null &&
+        typeof item === 'object' &&
+        !Array.isArray(item)
+    ) as Record<string, unknown>[];
+
+    const colunas = new Set<string>();
+    this.registros.forEach(registro => {
+      Object.keys(registro).forEach(coluna => colunas.add(coluna));
+    });
+
+    this.colunas = Array.from(colunas);
+    this.pagina = pagina;
+    this.ultimaPagina =
+      respostaGenerica?.last === true ||
+      this.registros.length < this.tamanhoPagina;
+
+    const totalBruto =
+      respostaGenerica?.totalElements ??
+      respostaGenerica?.numberOfElements ??
+      null;
+    const total = Number(totalBruto);
+
+    this.totalRegistros =
+      totalBruto !== null && Number.isFinite(total) ? total : null;
+    this.duracaoUltimaConsultaMs = duracaoMs;
+
+    this.sucesso = this.registros.length
+      ? `${this.registros.length} registro(s) carregado(s) em ${this.formatarDuracao(
+          duracaoMs
+        )}.`
+      : `Nenhum registro encontrado. Consulta concluída em ${this.formatarDuracao(
+          duracaoMs
+        )}.`;
+  }
+
+  private validarFiltrosExecucao(): string {
+    if (!this.selecionado) return 'Selecione um relatório.';
+
+    const obrigatorioVazio = this.selecionado.filtros.find(
+      filtro =>
+        filtro.obrigatorioFiltro === 'S' &&
+        String(this.valoresFiltro[filtro.nomeFiltro] ?? '').trim() === ''
+    );
+
+    if (obrigatorioVazio) {
+      return `Preencha o filtro obrigatório “${this.rotuloFiltro(
+        obrigatorioVazio
+      )}”.`;
+    }
+
+    const numeroInvalido = this.selecionado.filtros.find(filtro => {
+      const valor = String(
+        this.valoresFiltro[filtro.nomeFiltro] ?? ''
+      ).trim();
+
+      return (
+        valor !== '' &&
+        filtro.tipoDadoFiltro.toUpperCase() === 'NUMBER' &&
+        !Number.isFinite(Number(valor))
+      );
+    });
+
+    if (numeroInvalido) {
+      return `O filtro “${this.rotuloFiltro(
+        numeroInvalido
+      )}” deve conter um número válido.`;
+    }
+
+    return '';
+  }
+
+  private montarParametros(
+    omitirVazios: boolean
+  ): Record<string, unknown> {
     const parametros: Record<string, unknown> = {};
 
     if (!this.selecionado) return parametros;
@@ -540,7 +878,7 @@ export class RelatoriosComponent implements OnInit {
 
       parametros[filtro.nomeFiltro] =
         filtro.tipoDadoFiltro.toUpperCase() === 'NUMBER'
-          ? Number(valor)
+          ? Number(texto)
           : texto;
     });
 
@@ -555,7 +893,8 @@ export class RelatoriosComponent implements OnInit {
     const relatorio: RelatorioCatalogo = {
       id: existente?.id ?? this.gerarId(),
       nomeExibicao:
-        this.novoNomeExibicao.trim() || this.tituloAPartirDoNome(api.nome),
+        this.novoNomeExibicao.trim() ||
+        this.tituloAPartirDoNome(api.nome),
       descricao: this.novaDescricao.trim(),
       apiNome: api.nome,
       filtros: Array.isArray(api.filtros) ? api.filtros : [],
@@ -578,15 +917,45 @@ export class RelatoriosComponent implements OnInit {
       item => item.id !== relatorio.id
     );
 
+    delete this.valoresFiltroPorRelatorio[relatorio.id];
+
+    this.templates = this.templates
+      .map(template => ({
+        ...template,
+        relatorioIds: template.relatorioIds.filter(
+          id => id !== relatorio.id
+        ),
+      }))
+      .filter(template => template.relatorioIds.length > 0);
+
     this.persistir();
+    this.persistirTemplates();
     this.aplicarPesquisa();
+
+    if (this.templateAtivo) {
+      const templateAtualizado = this.templates.find(
+        template => template.id === this.templateAtivo?.id
+      );
+
+      if (templateAtualizado) {
+        this.templateAtivo = templateAtualizado;
+        this.relatoriosAbertos = templateAtualizado.relatorioIds
+          .map(id => this.relatorios.find(item => item.id === id))
+          .filter(
+            (item): item is RelatorioCatalogo => Boolean(item)
+          );
+      } else {
+        this.fecharTemplateAtivo();
+      }
+    }
 
     if (this.selecionado?.id === relatorio.id) {
       this.selecionado = null;
       this.limparResultado();
 
-      if (this.relatorios.length) {
-        this.selecionar(this.relatorios[0]);
+      const proximo = this.relatoriosAbertos[0] ?? this.relatorios[0];
+      if (proximo) {
+        this.selecionar(proximo, Boolean(this.templateAtivo));
       }
     }
   }
@@ -595,33 +964,73 @@ export class RelatoriosComponent implements OnInit {
     this.relatorioService.salvarCatalogo(this.relatorios);
   }
 
+  private persistirTemplates(): void {
+    this.relatorioService.salvarTemplates(this.templates);
+  }
+
   private validarNovaApi(api: SguApiDefinicao): string {
     if (!api.nome) return 'Informe o nome da API.';
     if (!api.consultaSQL) return 'Informe a consulta SQL.';
+
     if (!this.novoNomeExibicao.trim()) {
       return 'Informe o nome de exibição do relatório.';
     }
-    if (!api.filtros.length) return 'Adicione pelo menos um filtro.';
 
-    for (const filtro of api.filtros) {
+    if (!api.filtros.length) {
+      return 'Adicione pelo menos um filtro.';
+    }
+
+    if (!api.consultaSQL.includes('/*FILTROS*/')) {
+      return 'A consulta SQL deve conter o marcador /*FILTROS*/.';
+    }
+
+    for (const [indice, filtro] of api.filtros.entries()) {
       if (
         !filtro.nomeFiltro ||
         !/^[a-z0-9_]+$/.test(filtro.nomeFiltro)
       ) {
-        return 'O nome de cada filtro deve estar em minúsculo, sem espaços e usar apenas letras, números ou underscore.';
+        return `Filtro ${indice + 1}: o nome deve estar em minúsculo, sem espaços e usar apenas letras, números ou underscore.`;
       }
 
       if (!filtro.conteudoFiltro.startsWith('and ')) {
         return `O conteúdo do filtro “${filtro.nomeFiltro}” deve começar com “and ” em minúsculo.`;
       }
 
-      if (!filtro.conteudoFiltro.includes(`:${filtro.nomeFiltro}`)) {
-        return `O filtro “${filtro.nomeFiltro}” deve usar o parâmetro :${filtro.nomeFiltro}.`;
-      }
+      const erroBind = this.validarCorrespondenciaBind(filtro);
+      if (erroBind) return erroBind;
 
-      if (!/^(NUMBER|DATE|VARCHAR\(\d+\))$/i.test(filtro.tipoDadoFiltro)) {
+      if (
+        !/^(NUMBER|DATE|VARCHAR\(\d+\))$/i.test(
+          filtro.tipoDadoFiltro
+        )
+      ) {
         return `Tipo inválido no filtro “${filtro.nomeFiltro}”. Use NUMBER, DATE ou VARCHAR(tamanho).`;
       }
+    }
+
+    return '';
+  }
+
+  private validarCorrespondenciaBind(filtro: SguFiltro): string {
+    const nome = filtro.nomeFiltro.trim();
+    const variaveis = Array.from(
+      filtro.conteudoFiltro.matchAll(/:([A-Za-z_][A-Za-z0-9_]*)/g),
+      resultado => resultado[1]
+    );
+    const variaveisUnicas = Array.from(new Set(variaveis));
+
+    if (!variaveisUnicas.length) {
+      return `O filtro “${nome}” não possui uma variável de bind. Use :${nome} no conteúdo SQL.`;
+    }
+
+    const divergentes = variaveisUnicas.filter(
+      variavel => variavel !== nome
+    );
+
+    if (divergentes.length || !variaveisUnicas.includes(nome)) {
+      return `O nome do filtro “${nome}” deve ser exatamente igual à variável do conteúdo SQL. Variável encontrada: ${variaveisUnicas
+        .map(variavel => `:${variavel}`)
+        .join(', ')}. Corrija para :${nome}.`;
     }
 
     return '';
@@ -661,6 +1070,89 @@ export class RelatoriosComponent implements OnInit {
         sensitivity: 'base',
       })
     );
+  }
+
+  private normalizarTemplates(
+    templates: RelatorioTemplate[]
+  ): RelatorioTemplate[] {
+    const idsRelatorios = new Set(this.relatorios.map(item => item.id));
+
+    return (templates ?? [])
+      .map(template => ({
+        ...template,
+        relatorioIds: Array.from(
+          new Set(
+            (template.relatorioIds ?? []).filter(id =>
+              idsRelatorios.has(id)
+            )
+          )
+        ),
+      }))
+      .filter(
+        template =>
+          Boolean(template.id) &&
+          Boolean(template.nome?.trim()) &&
+          template.relatorioIds.length > 0
+      );
+  }
+
+  private criarValoresFiltroVazios(
+    relatorio: RelatorioCatalogo
+  ): Record<string, string | number> {
+    const valores: Record<string, string | number> = {};
+
+    relatorio.filtros.forEach(filtro => {
+      valores[filtro.nomeFiltro] = '';
+    });
+
+    return valores;
+  }
+
+  private salvarFiltrosSelecionadoAtual(): void {
+    if (!this.selecionado) return;
+    this.valoresFiltroPorRelatorio[this.selecionado.id] = {
+      ...this.valoresFiltro,
+    };
+  }
+
+  private iniciarGeracao(): void {
+    this.pararCronometroGeracao();
+    this.carregando = true;
+    this.segundosGeracao = 0;
+    this.mensagemGeracao = 'Enviando a consulta para o SGU…';
+    this.inicioGeracao = performance.now();
+    this.erro = '';
+    this.sucesso = '';
+
+    this.intervaloGeracao = setInterval(() => {
+      this.segundosGeracao += 1;
+
+      if (this.segundosGeracao >= 20) {
+        this.mensagemGeracao =
+          'A consulta continua em execução. Aguarde a resposta do SGU…';
+      } else if (this.segundosGeracao >= 8) {
+        this.mensagemGeracao =
+          'Processando os dados e preparando a tabela…';
+      } else if (this.segundosGeracao >= 2) {
+        this.mensagemGeracao = 'Consultando os dados no SGU…';
+      }
+
+      this.cdr.detectChanges();
+    }, 1000);
+  }
+
+  private finalizarGeracao(): void {
+    this.pararCronometroGeracao();
+    this.carregando = false;
+    this.mensagemGeracao = '';
+    this.cdr.detectChanges();
+  }
+
+  private pararCronometroGeracao(): void {
+    if (this.intervaloGeracao) {
+      clearInterval(this.intervaloGeracao);
+      this.intervaloGeracao = undefined;
+    }
   }
 
   private tituloAPartirDoNome(nome: string): string {
@@ -709,7 +1201,45 @@ export class RelatoriosComponent implements OnInit {
   }
 
   private mensagemErro(erro: any, fallback: string): string {
-    return erro?.error?.message ?? erro?.message ?? fallback;
+    if (erro?.name === 'TimeoutError') {
+      return 'A operação ultrapassou o tempo limite e foi encerrada. Verifique os filtros e tente novamente.';
+    }
+
+    const httpErro = erro as HttpErrorResponse;
+    const status = Number(
+      httpErro?.status ?? httpErro?.error?.status ?? 0
+    );
+    const detalhe = this.extrairDetalheErro(erro) || fallback;
+
+    if (status === 0) {
+      return `Não foi possível conectar ao backend. ${detalhe}`;
+    }
+
+    if (status > 0) {
+      return `Erro ${status}: ${detalhe}`;
+    }
+
+    return detalhe;
+  }
+
+  private extrairDetalheErro(erro: any): string {
+    const corpo = erro?.error;
+
+    if (typeof corpo === 'string') {
+      try {
+        const json = JSON.parse(corpo);
+        return json?.message ?? json?.error ?? corpo;
+      } catch {
+        return corpo;
+      }
+    }
+
+    return (
+      corpo?.message ??
+      corpo?.error ??
+      erro?.message ??
+      ''
+    );
   }
 
   private async mensagemErroBlob(
@@ -719,10 +1249,24 @@ export class RelatoriosComponent implements OnInit {
     try {
       if (erro?.error instanceof Blob) {
         const texto = await erro.error.text();
-        const json = JSON.parse(texto);
-        return json.message ?? fallback;
+
+        try {
+          const json = JSON.parse(texto);
+          const mensagem = json?.message ?? json?.error ?? texto;
+          const status = Number(erro?.status ?? json?.status ?? 0);
+          return status > 0
+            ? `Erro ${status}: ${mensagem}`
+            : mensagem || fallback;
+        } catch {
+          const status = Number(erro?.status ?? 0);
+          return status > 0
+            ? `Erro ${status}: ${texto || fallback}`
+            : texto || fallback;
+        }
       }
-    } catch {}
+    } catch {
+      return fallback;
+    }
 
     return this.mensagemErro(erro, fallback);
   }
