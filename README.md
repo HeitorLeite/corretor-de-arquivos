@@ -4,8 +4,6 @@ Aplicação interna desenvolvida para centralizar rotinas de correção, valida�
 
 O projeto reúne ferramentas para arquivos XML TISS, planilhas de BI, arquivos posicionais da ANS, consultas do SGU e futuras rotinas de fechamento de produção.
 
-> **Aviso importante:** a aplicação trabalha com arquivos e informações corporativas. Não publique chaves de API, dados de beneficiários, arquivos de produção ou credenciais no GitHub.
-
 ---
 
 ## Sumário
