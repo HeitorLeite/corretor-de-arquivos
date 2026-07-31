@@ -1,0 +1,46 @@
+<section class="tool-page reports-entry-page">
+  <header class="entry-header">
+    <span class="badge badge-ans">Relatórios</span>
+    <h1>Como você deseja gerar os relatórios?</h1>
+    <p>
+      Escolha o modo manual para trabalhar com um relatório por vez ou use a
+      automação para gerar vários relatórios de várias empresas em um único lote.
+    </p>
+  </header>
+
+  <div class="mode-grid">
+    <button class="mode-card" type="button" (click)="escolherManual.emit()">
+      <span class="mode-icon" aria-hidden="true">▤</span>
+      <span class="mode-copy">
+        <strong>Gerar relatórios manualmente</strong>
+        <span>
+          Acesse o catálogo, templates, cadastro de APIs, visualização, filtros e
+          downloads individuais.
+        </span>
+        <small>{{ quantidadeRelatorios }} relatório(s) no catálogo</small>
+      </span>
+      <span class="mode-arrow" aria-hidden="true">→</span>
+    </button>
+
+    <button class="mode-card featured" type="button" (click)="escolherAutomatico.emit()">
+      <span class="mode-icon" aria-hidden="true">⚙</span>
+      <span class="mode-copy">
+        <strong>Gerar grupos automaticamente</strong>
+        <span>
+          Selecione vários relatórios, informe empresas e competências e baixe
+          todos os arquivos organizados em um ZIP.
+        </span>
+        <small>{{ quantidadeGrupos }} grupo(s) automático(s) salvo(s)</small>
+      </span>
+      <span class="mode-arrow" aria-hidden="true">→</span>
+    </button>
+  </div>
+
+  <div class="entry-note">
+    <strong>Exemplo</strong>
+    <span>
+      Yakult + Orica × Despesas + Beneficiários + Receita = todos os arquivos
+      gerados automaticamente com nomes padronizados.
+    </span>
+  </div>
+</section>

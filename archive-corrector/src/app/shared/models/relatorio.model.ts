@@ -35,6 +35,33 @@ export interface RelatorioTemplate {
   criadoEm: string;
 }
 
+export interface RelatorioGrupoItem {
+  relatorioId: string;
+  nomeArquivo: string;
+}
+
+export interface RelatorioGrupoAutomatico {
+  id: string;
+  nome: string;
+  descricao: string;
+  formato: FormatoExportacao;
+  itens: RelatorioGrupoItem[];
+  criadoEm: string;
+  atualizadoEm?: string;
+}
+
+export interface RelatorioLoteItemRequest {
+  apiNome: string;
+  nomeArquivo: string;
+  combinacoesFiltros: Record<string, unknown>[];
+}
+
+export interface RelatorioLoteRequest {
+  nomeArquivo: string;
+  formato: FormatoExportacao;
+  itens: RelatorioLoteItemRequest[];
+}
+
 export interface SguResultado {
   content: Record<string, unknown>[];
   totalElements?: number;

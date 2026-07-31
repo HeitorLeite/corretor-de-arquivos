@@ -1,0 +1,129 @@
+:host {
+  display: block;
+}
+
+.reports-entry-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.entry-header {
+  max-width: 760px;
+  margin-bottom: 28px;
+}
+
+.entry-header h1 {
+  margin: 12px 0 10px;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+  line-height: 1.08;
+}
+
+.entry-header p {
+  margin: 0;
+  color: var(--text-muted, #667085);
+  font-size: 1.02rem;
+  line-height: 1.65;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.mode-card {
+  min-height: 245px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 18px;
+  padding: 26px;
+  border: 1px solid var(--border-color, #dfe3e8);
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.mode-card:hover,
+.mode-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: var(--primary, #006b5f);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+  outline: none;
+}
+
+.mode-card.featured {
+  background: linear-gradient(145deg, rgba(0, 107, 95, 0.08), rgba(255, 255, 255, 0.98));
+  border-color: rgba(0, 107, 95, 0.35);
+}
+
+.mode-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(0, 107, 95, 0.1);
+  color: var(--primary, #006b5f);
+  font-size: 1.55rem;
+}
+
+.mode-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mode-copy strong {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.mode-copy span {
+  color: var(--text-muted, #667085);
+  line-height: 1.55;
+}
+
+.mode-copy small {
+  margin-top: auto;
+  color: var(--primary, #006b5f);
+  font-weight: 700;
+}
+
+.mode-arrow {
+  font-size: 1.5rem;
+  color: var(--primary, #006b5f);
+}
+
+.entry-note {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(2, 132, 199, 0.08);
+  color: var(--text-muted, #475467);
+}
+
+.entry-note strong {
+  color: var(--text, #101828);
+}
+
+@media (max-width: 820px) {
+  .reports-entry-page {
+    padding: 22px 16px;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-card {
+    min-height: 0;
+  }
+}

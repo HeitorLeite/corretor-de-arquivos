@@ -4,7 +4,7 @@
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug",
-    "proxyTimeout": 120000,
-    "timeout": 120000
+    "proxyTimeout": 3600000,
+    "timeout": 3600000
   }
 }

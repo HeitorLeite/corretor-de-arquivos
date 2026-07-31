@@ -1,0 +1,407 @@
+<section class="tool-page automatic-reports-page">
+  <header class="automatic-header">
+    <div>
+      <button class="back-link" type="button" (click)="voltar.emit()">
+        ← Escolher outro modo
+      </button>
+      <span class="badge badge-ans">Automação</span>
+      <h1>Grupos automáticos de relatórios</h1>
+      <p>
+        Gere vários relatórios para várias empresas e competências. Cada arquivo
+        é nomeado automaticamente e entregue dentro de um único ZIP.
+      </p>
+    </div>
+    <button class="btn btn-primary" type="button" (click)="abrirNovoGrupo()">
+      ＋ Novo grupo
+    </button>
+  </header>
+
+  <div class="alert alert-error" *ngIf="erro" role="alert">
+    <span>{{ erro }}</span>
+    <button type="button" (click)="erro = ''" aria-label="Fechar">×</button>
+  </div>
+
+  <div class="alert alert-success" *ngIf="sucesso" role="status">
+    <span>{{ sucesso }}</span>
+    <button type="button" (click)="sucesso = ''" aria-label="Fechar">×</button>
+  </div>
+
+  <div class="automatic-shell" *ngIf="grupos.length; else nenhumGrupo">
+    <aside class="groups-catalog card">
+      <div class="catalog-title">
+        <div>
+          <h2>Grupos salvos</h2>
+          <span>{{ grupos.length }} grupo(s)</span>
+        </div>
+        <button type="button" title="Novo grupo" (click)="abrirNovoGrupo()">＋</button>
+      </div>
+
+      <div class="group-list">
+        <button
+          class="group-card"
+          type="button"
+          *ngFor="let grupo of grupos; trackBy: trackByGrupoId"
+          [class.active]="grupoSelecionado?.id === grupo.id"
+          (click)="selecionarGrupo(grupo)"
+        >
+          <span class="group-card-icon" aria-hidden="true">⚙</span>
+          <span class="group-card-copy">
+            <strong>{{ grupo.nome }}</strong>
+            <small>{{ resumoGrupo(grupo) }}</small>
+          </span>
+          <span class="group-actions">
+            <span
+              role="button"
+              tabindex="0"
+              title="Editar grupo"
+              (click)="abrirEdicaoGrupo(grupo, $event)"
+              (keydown.enter)="abrirEdicaoGrupo(grupo, $event)"
+            >✎</span>
+            <span
+              role="button"
+              tabindex="0"
+              title="Excluir grupo"
+              (click)="excluirGrupo(grupo, $event)"
+              (keydown.enter)="excluirGrupo(grupo, $event)"
+            >×</span>
+          </span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="automatic-workspace" *ngIf="grupoSelecionado">
+      <section class="card group-summary">
+        <div>
+          <span class="eyebrow">Grupo selecionado</span>
+          <h2>{{ grupoSelecionado.nome }}</h2>
+          <p>
+            {{
+              grupoSelecionado.descricao ||
+                'Preencha os filtros abaixo para gerar todos os arquivos do grupo.'
+            }}
+          </p>
+        </div>
+        <div class="summary-numbers">
+          <span>
+            <strong>{{ relatoriosDoGrupo().length }}</strong>
+            relatório(s)
+          </span>
+          <span>
+            <strong>{{ quantidadeArquivosPrevista }}</strong>
+            arquivo(s) previsto(s)
+          </span>
+        </div>
+      </section>
+
+      <section class="card execution-card">
+        <div class="section-heading">
+          <div>
+            <span class="step-number">1</span>
+            <div>
+              <h3>Empresas</h3>
+              <p *ngIf="filtroEmpresa; else nenhumFiltroEmpresa">
+                Informe um ou vários códigos pertencentes à empresa e o nome que
+                será usado nos arquivos.
+              </p>
+              <ng-template #nenhumFiltroEmpresa>
+                <p>Nenhum relatório deste grupo utiliza filtro de empresa.</p>
+              </ng-template>
+            </div>
+          </div>
+          <button
+            *ngIf="filtroEmpresa"
+            class="btn btn-secondary btn-sm"
+            type="button"
+            (click)="adicionarEmpresa()"
+          >
+            ＋ Adicionar empresa
+          </button>
+        </div>
+
+        <div class="company-list" *ngIf="filtroEmpresa">
+          <div
+            class="company-row"
+            *ngFor="let empresa of empresasExecucao; let i = index; trackBy: trackByEmpresaId"
+          >
+            <div class="field company-codes">
+              <label [for]="'empresa-codigos-' + empresa.id">
+                Código(s) da empresa <span class="required">*</span>
+              </label>
+              <input
+                [id]="'empresa-codigos-' + empresa.id"
+                type="text"
+                [(ngModel)]="empresa.codigos"
+                placeholder="Ex.: 2232751,2234452"
+              />
+              <small>Use vírgula quando uma empresa possuir mais de um código.</small>
+            </div>
+
+            <div class="field company-name">
+              <label [for]="'empresa-nome-' + empresa.id">
+                Nome nos arquivos <span class="required">*</span>
+              </label>
+              <input
+                [id]="'empresa-nome-' + empresa.id"
+                type="text"
+                [(ngModel)]="empresa.nome"
+                placeholder="Ex.: yakult"
+              />
+              <small>Exemplo de saída: yakult_despesa_01_02.xlsx</small>
+            </div>
+
+            <button
+              class="remove-row"
+              type="button"
+              title="Remover empresa"
+              [disabled]="empresasExecucao.length === 1"
+              (click)="removerEmpresa(i)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card execution-card" *ngIf="filtrosGerais.length">
+        <div class="section-heading">
+          <div>
+            <span class="step-number">2</span>
+            <div>
+              <h3>Demais filtros</h3>
+              <p>
+                Os filtros iguais foram reunidos. Adicione vários valores quando
+                quiser juntar mais de uma competência no mesmo arquivo.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="unified-filters">
+          <div
+            class="unified-filter"
+            *ngFor="let filtro of filtrosGerais; trackBy: trackByFiltroChave"
+          >
+            <div class="unified-filter-heading">
+              <div>
+                <strong>{{ filtro.rotulo }}</strong>
+                <small>
+                  Usado por {{ filtro.usos.length }} definição(ões)
+                  <span *ngIf="filtro.obrigatorio"> · obrigatório</span>
+                </small>
+              </div>
+              <button
+                class="btn btn-secondary btn-sm"
+                type="button"
+                (click)="adicionarValorFiltro(filtro)"
+              >
+                ＋ Adicionar valor
+              </button>
+            </div>
+
+            <div class="filter-values">
+              <div
+                class="filter-value-row"
+                *ngFor="let item of filtro.valores; let i = index; trackBy: trackByValorId"
+              >
+                <input
+                  [type]="tipoInputFiltro(filtro)"
+                  [(ngModel)]="item.valor"
+                  [placeholder]="placeholderFiltro(filtro)"
+                />
+                <button
+                  type="button"
+                  title="Remover valor"
+                  [disabled]="filtro.valores.length === 1"
+                  (click)="removerValorFiltro(filtro, i)"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card execution-card output-card">
+        <div class="section-heading">
+          <div>
+            <span class="step-number">{{ filtrosGerais.length ? 3 : 2 }}</span>
+            <div>
+              <h3>Formato e download</h3>
+              <p>Todos os relatórios serão organizados dentro de um arquivo ZIP.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-grid">
+          <div class="field">
+            <label for="automatic-zip-name">Nome do ZIP</label>
+            <div class="file-name-input">
+              <input
+                id="automatic-zip-name"
+                type="text"
+                [(ngModel)]="nomeArquivoZip"
+                placeholder="grupo_relatorios"
+              />
+              <span>.zip</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Formato dos relatórios</label>
+            <div class="format-options" role="radiogroup">
+              <button
+                type="button"
+                [class.active]="formatoExecucao === 'xlsx'"
+                (click)="formatoExecucao = 'xlsx'"
+              >XLSX</button>
+              <button
+                type="button"
+                [class.active]="formatoExecucao === 'csv'"
+                (click)="formatoExecucao = 'csv'"
+              >CSV</button>
+              <button
+                type="button"
+                [class.active]="formatoExecucao === 'txt'"
+                (click)="formatoExecucao = 'txt'"
+              >TXT</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="generation-preview">
+          <span aria-hidden="true">⌁</span>
+          <div>
+            <strong>{{ quantidadeArquivosPrevista }} arquivo(s) serão gerados</strong>
+            <small>
+              Valores múltiplos, como 202601 e 202602, são consultados separadamente
+              e reunidos no mesmo arquivo do relatório.
+            </small>
+          </div>
+        </div>
+
+        <button
+          class="btn btn-primary btn-lg generate-batch"
+          type="button"
+          [disabled]="executando || quantidadeArquivosPrevista === 0"
+          (click)="gerarGrupoAutomaticamente()"
+        >
+          <span class="spinner" *ngIf="executando"></span>
+          {{
+            executando
+              ? 'Gerando lote… ' + segundosExecucao + 's'
+              : 'Gerar todos os relatórios'
+          }}
+        </button>
+
+        <div class="batch-progress" *ngIf="executando" aria-live="polite">
+          <div>
+            <strong>O backend está consultando e montando os arquivos.</strong>
+            <small>
+              Não feche esta página. Lotes grandes podem levar vários minutos.
+            </small>
+          </div>
+          <div class="progress-line"><span></span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <ng-template #nenhumGrupo>
+    <section class="empty-groups card">
+      <span class="empty-icon" aria-hidden="true">⚙</span>
+      <h2>Nenhum grupo automático criado</h2>
+      <p>
+        Crie um grupo, selecione Despesas, Beneficiários, Receita ou quaisquer
+        outros relatórios e depois gere tudo para várias empresas.
+      </p>
+      <button class="btn btn-primary" type="button" (click)="abrirNovoGrupo()">
+        Criar primeiro grupo
+      </button>
+    </section>
+  </ng-template>
+</section>
+
+<div class="modal-backdrop" *ngIf="modalGrupoAberto" (click)="fecharModalGrupo()">
+  <section class="modal-card group-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <span class="eyebrow">Grupo automático</span>
+        <h2>{{ grupoEmEdicaoId ? 'Editar grupo' : 'Novo grupo' }}</h2>
+      </div>
+      <button type="button" aria-label="Fechar" (click)="fecharModalGrupo()">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="group-form-grid">
+        <div class="field">
+          <label for="group-name">Nome do grupo <span class="required">*</span></label>
+          <input id="group-name" type="text" [(ngModel)]="grupoNome" placeholder="Ex.: Fechamento mensal empresas" />
+        </div>
+
+        <div class="field">
+          <label for="group-format">Formato padrão</label>
+          <select id="group-format" [(ngModel)]="grupoFormato">
+            <option value="xlsx">XLSX</option>
+            <option value="csv">CSV</option>
+            <option value="txt">TXT</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="group-description">Descrição</label>
+        <textarea
+          id="group-description"
+          rows="2"
+          [(ngModel)]="grupoDescricao"
+          placeholder="Explique quando este grupo deve ser utilizado."
+        ></textarea>
+      </div>
+
+      <div class="reports-selection-heading">
+        <div>
+          <h3>Relatórios do grupo</h3>
+          <p>Selecione os relatórios e defina o trecho usado no nome de cada arquivo.</p>
+        </div>
+        <span>{{ quantidadeRelatoriosGrupoSelecionados }} selecionado(s)</span>
+      </div>
+
+      <div class="reports-selection">
+        <label
+          class="report-selection-row"
+          *ngFor="let relatorio of relatorios; trackBy: trackByRelatorioId"
+          [class.selected]="relatoriosGrupoSelecionados[relatorio.id]"
+        >
+          <input
+            type="checkbox"
+            [(ngModel)]="relatoriosGrupoSelecionados[relatorio.id]"
+            (ngModelChange)="alternarRelatorioGrupo(relatorio, $event)"
+          />
+          <span class="selection-report-copy">
+            <strong>{{ relatorio.nomeExibicao }}</strong>
+            <small>{{ relatorio.apiNome }}</small>
+          </span>
+          <span class="file-label-field" *ngIf="relatoriosGrupoSelecionados[relatorio.id]">
+            <small>Nome no arquivo</small>
+            <input
+              type="text"
+              [(ngModel)]="nomesArquivoRelatorio[relatorio.id]"
+              (click)="$event.stopPropagation()"
+              placeholder="despesa"
+            />
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" type="button" (click)="fecharModalGrupo()">
+        Cancelar
+      </button>
+      <button class="btn btn-primary" type="button" (click)="salvarGrupo()">
+        {{ grupoEmEdicaoId ? 'Salvar alterações' : 'Criar grupo' }}
+      </button>
+    </div>
+  </section>
+</div>

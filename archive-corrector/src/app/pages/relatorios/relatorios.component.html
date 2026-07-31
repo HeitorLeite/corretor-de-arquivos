@@ -1,3 +1,18 @@
+<app-relatorios-inicio
+  *ngIf="modoPagina === 'selecao'"
+  [quantidadeRelatorios]="relatorios.length"
+  [quantidadeGrupos]="quantidadeGruposAutomaticos"
+  (escolherManual)="selecionarModoPagina('manual')"
+  (escolherAutomatico)="selecionarModoPagina('automatico')"
+></app-relatorios-inicio>
+
+<app-relatorios-automaticos
+  *ngIf="modoPagina === 'automatico'"
+  [relatorios]="relatorios"
+  (voltar)="voltarSelecaoModo()"
+></app-relatorios-automaticos>
+
+<ng-container *ngIf="modoPagina === 'manual'">
 <section class="tool-page relatorios-page">
   <header class="tool-page-header page-header-row">
     <div>
@@ -6,6 +21,9 @@
       <p>Consulte as APIs cadastradas no SGU, visualize os dados e exporte o relatório completo.</p>
     </div>
     <div class="page-header-actions">
+      <button class="btn btn-secondary" type="button" (click)="voltarSelecaoModo()">
+        <span aria-hidden="true">←</span> Trocar modo
+      </button>
       <button class="btn btn-secondary" type="button" (click)="abrirNovoTemplate()">
         <span aria-hidden="true">▦</span> Novo template
       </button>
@@ -159,8 +177,8 @@
               type="button"
               role="tab"
               *ngFor="let relatorio of relatoriosAbertos; trackBy: trackByRelatorioId"
-              [class.active]="selecionado?.id === relatorio.id"
-              [attr.aria-selected]="selecionado?.id === relatorio.id"
+              [class.active]="selecionado.id === relatorio.id"
+              [attr.aria-selected]="selecionado.id === relatorio.id"
               (click)="selecionarRelatorioTemplate(relatorio)"
             >
               <strong>{{ relatorio.nomeExibicao }}</strong>
@@ -346,6 +364,7 @@
       <button type="button" [class.active]="modoCadastro === 'existente'" (click)="mudarModo('existente')">Buscar pelo nome</button>
       <button type="button" [class.active]="modoCadastro === 'lista'" (click)="mudarModo('lista')">Escolher na lista</button>
       <button type="button" [class.active]="modoCadastro === 'nova'" (click)="mudarModo('nova')">Cadastrar nova API</button>
+      <button type="button" [class.active]="modoCadastro === 'arquivos'" (click)="mudarModo('arquivos')">Importar arquivos SQL</button>
     </div>
 
     <div class="modal-alert" *ngIf="erro">{{ erro }}</div>
@@ -441,6 +460,298 @@
         <strong>Nenhuma API encontrada</strong>
         <p>Altere a pesquisa ou atualize a lista.</p>
       </div>
+    </div>
+
+    <div class="modal-body sql-import-body" *ngIf="modoCadastro === 'arquivos'">
+      <div
+        class="sql-upload-zone"
+        [class.dragging]="arrastandoArquivosSql"
+        [class.disabled]="criandoApisEmLote"
+        (dragover)="aoArrastarArquivosSql($event)"
+        (dragleave)="aoSairDaAreaArquivosSql($event)"
+        (drop)="soltarArquivosSql($event)"
+      >
+        <input
+          #arquivosSqlInput
+          type="file"
+          accept=".sql,.txt,text/plain,application/sql"
+          multiple
+          hidden
+          (change)="selecionarArquivosSql($event)"
+        />
+
+        <div class="sql-upload-icon" aria-hidden="true">SQL</div>
+        <div class="sql-upload-copy">
+          <strong>Arraste um ou mais códigos SQL</strong>
+          <p>Também é possível selecionar vários arquivos <code>.sql</code> ou <code>.txt</code> de uma só vez.</p>
+        </div>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          [disabled]="carregandoArquivosSql || criandoApisEmLote"
+          (click)="arquivosSqlInput.click()"
+        >
+          {{ carregandoArquivosSql ? 'Lendo arquivos…' : 'Selecionar arquivos' }}
+        </button>
+      </div>
+
+      <div class="sql-import-help">
+        <strong>Como funciona</strong>
+        <p>
+          O nome da API e o nome de exibição são preenchidos a partir do nome do arquivo.
+          Variáveis como <code>:competencia</code> são detectadas automaticamente.
+          Competências fixas em CTEs <code>PARAM</code> ou <code>PARAMETROS</code>
+          também são convertidas para filtro.
+          A aplicação também inclui <code>WHERE 1 = 1</code> e <code>/*FILTROS*/</code> quando necessário.
+        </p>
+      </div>
+
+      <div class="batch-progress" *ngIf="criandoApisEmLote" aria-live="polite">
+        <div>
+          <strong>Cadastrando APIs no SGU…</strong>
+          <span>{{ progressoCriacaoLote }} de {{ totalCriacaoLote }}</span>
+        </div>
+        <progress [value]="progressoCriacaoLote" [max]="totalCriacaoLote || 1"></progress>
+      </div>
+
+      <div class="sql-files-summary" *ngIf="arquivosSqlImportados.length">
+        <span>{{ arquivosSqlImportados.length }} arquivo(s) carregado(s)</span>
+        <strong>{{ quantidadeArquivosProntos }} pronto(s) para cadastrar</strong>
+      </div>
+
+      <div class="sql-file-list" *ngIf="arquivosSqlImportados.length; else nenhumArquivoSql">
+        <article
+          class="sql-file-card"
+          *ngFor="let arquivo of arquivosSqlImportados; let arquivoIndex = index; trackBy: trackByArquivoSqlId"
+          [class.has-error]="!!erroArquivoSql(arquivo) || arquivo.status === 'erro'"
+          [class.is-success]="arquivo.status === 'sucesso'"
+          [class.is-loading]="arquivo.status === 'criando'"
+        >
+          <header class="sql-file-header">
+            <div class="sql-file-identity">
+              <span class="sql-file-number">{{ arquivoIndex + 1 }}</span>
+              <div>
+                <strong>{{ arquivo.arquivoNome }}</strong>
+                <small>
+                  {{ formatarTamanhoArquivo(arquivo.tamanhoBytes) }}
+                  <span *ngIf="arquivo.filtros.length"> · {{ arquivo.filtros.length }} filtro(s) detectado(s)</span>
+                  <span *ngIf="arquivo.ajustesAplicados.length"> · {{ arquivo.ajustesAplicados.length }} ajuste(s) automático(s)</span>
+                </small>
+              </div>
+            </div>
+
+            <div class="sql-file-header-actions">
+              <span class="sql-status status-loading" *ngIf="arquivo.status === 'criando'">Cadastrando…</span>
+              <span class="sql-status status-success" *ngIf="arquivo.status === 'sucesso'">Criada</span>
+              <span class="sql-status status-error" *ngIf="arquivo.status === 'erro'">Revisar</span>
+              <button
+                class="link-danger"
+                type="button"
+                [disabled]="criandoApisEmLote"
+                (click)="removerArquivoSql(arquivo.id)"
+              >
+                Remover
+              </button>
+            </div>
+          </header>
+
+          <div class="two-cols sql-file-main-fields">
+            <div class="field">
+              <label [for]="'arquivo-api-nome-' + arquivo.id">Nome da API *</label>
+              <input
+                [id]="'arquivo-api-nome-' + arquivo.id"
+                [name]="'arquivo-api-nome-' + arquivo.id"
+                [(ngModel)]="arquivo.apiNome"
+                [disabled]="criandoApisEmLote"
+                placeholder="0090-nome-da-api"
+              />
+            </div>
+
+            <div class="field">
+              <label [for]="'arquivo-exibicao-' + arquivo.id">Nome para exibição *</label>
+              <input
+                [id]="'arquivo-exibicao-' + arquivo.id"
+                [name]="'arquivo-exibicao-' + arquivo.id"
+                [(ngModel)]="arquivo.nomeExibicao"
+                [disabled]="criandoApisEmLote"
+                placeholder="Nome do relatório"
+              />
+            </div>
+          </div>
+
+          <div class="sql-file-error" *ngIf="(arquivo.erro || erroArquivoSql(arquivo)) as erroSql">
+            {{ erroSql }}
+          </div>
+
+          <div class="sql-import-help" *ngIf="arquivo.ajustesAplicados.length">
+            <strong>Ajustes automáticos aplicados</strong>
+            <p *ngFor="let ajuste of arquivo.ajustesAplicados">• {{ ajuste }}</p>
+          </div>
+
+          <button
+            class="sql-details-toggle"
+            type="button"
+            [disabled]="criandoApisEmLote"
+            (click)="alternarDetalhesArquivoSql(arquivo)"
+          >
+            {{ arquivo.detalhesAbertos ? 'Ocultar configurações' : 'Revisar SQL, ordenação e filtros' }}
+            <span aria-hidden="true">{{ arquivo.detalhesAbertos ? '⌃' : '⌄' }}</span>
+          </button>
+
+          <div class="sql-file-details" *ngIf="arquivo.detalhesAbertos">
+            <div class="two-cols">
+              <div class="field">
+                <label [for]="'arquivo-descricao-' + arquivo.id">Descrição</label>
+                <input
+                  [id]="'arquivo-descricao-' + arquivo.id"
+                  [name]="'arquivo-descricao-' + arquivo.id"
+                  [(ngModel)]="arquivo.descricao"
+                  [disabled]="criandoApisEmLote"
+                  placeholder="Descrição opcional"
+                />
+              </div>
+
+              <div class="field">
+                <label [for]="'arquivo-ordenacao-' + arquivo.id">Ordenação padrão</label>
+                <input
+                  [id]="'arquivo-ordenacao-' + arquivo.id"
+                  [name]="'arquivo-ordenacao-' + arquivo.id"
+                  [(ngModel)]="arquivo.ordenacao"
+                  [disabled]="criandoApisEmLote"
+                  placeholder="NOME, CODIGO"
+                />
+              </div>
+            </div>
+
+            <div class="field full-field">
+              <label [for]="'arquivo-sql-' + arquivo.id">Consulta SQL *</label>
+              <textarea
+                [id]="'arquivo-sql-' + arquivo.id"
+                [name]="'arquivo-sql-' + arquivo.id"
+                [(ngModel)]="arquivo.consultaSQL"
+                [disabled]="criandoApisEmLote"
+                (blur)="ajustarArquivoSql(arquivo)"
+                rows="10"
+                spellcheck="false"
+              ></textarea>
+              <small>
+                A aplicação ajusta automaticamente o <code>WHERE 1 = 1</code> e o
+                marcador <code>/*FILTROS*/</code>. Ainda assim, revise o ponto em que os filtros foram inseridos.
+              </small>
+            </div>
+
+            <div class="filter-builder batch-filter-builder">
+              <div class="builder-title">
+                <div>
+                  <h3>Filtros da API</h3>
+                  <p>Revise principalmente o tipo e a condição SQL dos filtros detectados.</p>
+                </div>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  type="button"
+                  [disabled]="criandoApisEmLote"
+                  (click)="adicionarFiltroArquivoSql(arquivo)"
+                >
+                  ＋ Adicionar filtro
+                </button>
+              </div>
+
+              <div class="no-filters batch-no-filters" *ngIf="!arquivo.filtros.length">
+                Nenhum filtro de negócio foi detectado. Para atender à exigência do SGU,
+                a aplicação enviará um filtro técnico opcional e invisível no relatório.
+              </div>
+
+              <article class="filter-row" *ngFor="let filtro of arquivo.filtros; let filtroIndex = index">
+                <div class="filter-row-header">
+                  <strong>Filtro {{ filtroIndex + 1 }}</strong>
+                  <button
+                    type="button"
+                    class="link-danger"
+                    [disabled]="criandoApisEmLote"
+                    (click)="removerFiltroArquivoSql(arquivo, filtroIndex)"
+                  >
+                    Remover
+                  </button>
+                </div>
+
+                <div class="filter-fields">
+                  <div class="field">
+                    <label [for]="'arquivo-filtro-nome-' + arquivo.id + '-' + filtroIndex">Nome *</label>
+                    <input
+                      [id]="'arquivo-filtro-nome-' + arquivo.id + '-' + filtroIndex"
+                      [name]="'arquivo-filtro-nome-' + arquivo.id + '-' + filtroIndex"
+                      [(ngModel)]="filtro.nomeFiltro"
+                      [disabled]="criandoApisEmLote"
+                      [class.input-invalid]="!!erroVariavelFiltro(filtro)"
+                    />
+                  </div>
+
+                  <div class="field">
+                    <label [for]="'arquivo-filtro-tipo-' + arquivo.id + '-' + filtroIndex">Tipo *</label>
+                    <input
+                      [id]="'arquivo-filtro-tipo-' + arquivo.id + '-' + filtroIndex"
+                      [name]="'arquivo-filtro-tipo-' + arquivo.id + '-' + filtroIndex"
+                      [(ngModel)]="filtro.tipoDadoFiltro"
+                      [disabled]="criandoApisEmLote"
+                      list="tipos-filtro-arquivo"
+                    />
+                  </div>
+
+                  <div class="field field-wide">
+                    <label [for]="'arquivo-filtro-conteudo-' + arquivo.id + '-' + filtroIndex">Conteúdo SQL *</label>
+                    <input
+                      [id]="'arquivo-filtro-conteudo-' + arquivo.id + '-' + filtroIndex"
+                      [name]="'arquivo-filtro-conteudo-' + arquivo.id + '-' + filtroIndex"
+                      [(ngModel)]="filtro.conteudoFiltro"
+                      [disabled]="criandoApisEmLote"
+                      [class.input-invalid]="!!erroVariavelFiltro(filtro)"
+                    />
+                    <small class="field-error" *ngIf="erroVariavelFiltro(filtro) as erroBindArquivo">{{ erroBindArquivo }}</small>
+                  </div>
+
+                  <div class="field">
+                    <label [for]="'arquivo-filtro-mascara-' + arquivo.id + '-' + filtroIndex">Máscara</label>
+                    <input
+                      [id]="'arquivo-filtro-mascara-' + arquivo.id + '-' + filtroIndex"
+                      [name]="'arquivo-filtro-mascara-' + arquivo.id + '-' + filtroIndex"
+                      [(ngModel)]="filtro.mascaraFiltro"
+                      [disabled]="criandoApisEmLote"
+                    />
+                  </div>
+
+                  <div class="field">
+                    <label [for]="'arquivo-filtro-obrigatorio-' + arquivo.id + '-' + filtroIndex">Obrigatório</label>
+                    <select
+                      [id]="'arquivo-filtro-obrigatorio-' + arquivo.id + '-' + filtroIndex"
+                      [name]="'arquivo-filtro-obrigatorio-' + arquivo.id + '-' + filtroIndex"
+                      [(ngModel)]="filtro.obrigatorioFiltro"
+                      [disabled]="criandoApisEmLote"
+                    >
+                      <option value="N">Não</option>
+                      <option value="S">Sim</option>
+                    </select>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <datalist id="tipos-filtro-arquivo">
+        <option value="NUMBER"></option>
+        <option value="DATE"></option>
+        <option value="VARCHAR(120)"></option>
+        <option value="VARCHAR(1000)"></option>
+        <option value="VARCHAR(4000)"></option>
+      </datalist>
+
+      <ng-template #nenhumArquivoSql>
+        <div class="api-list-empty sql-list-empty">
+          <strong>Nenhum código SQL selecionado</strong>
+          <p>Selecione um ou vários arquivos para preparar o cadastro em lote.</p>
+        </div>
+      </ng-template>
     </div>
 
     <div class="modal-body" *ngIf="modoCadastro === 'nova'">
@@ -546,6 +857,21 @@
       </button>
       <button *ngIf="modoCadastro === 'nova'" class="btn btn-primary" type="button" [disabled]="salvandoApi" (click)="criarNovaApi()">
         {{ salvandoApi ? 'Cadastrando…' : 'Cadastrar API e adicionar' }}
+      </button>
+      <button
+        *ngIf="modoCadastro === 'arquivos'"
+        class="btn btn-primary"
+        type="button"
+        [disabled]="criandoApisEmLote || carregandoArquivosSql || !arquivosSqlImportados.length || quantidadeArquivosProntos === 0"
+        (click)="criarApisDosArquivos()"
+      >
+        {{
+          criandoApisEmLote
+            ? 'Cadastrando ' + progressoCriacaoLote + ' de ' + totalCriacaoLote + '…'
+            : quantidadeArquivosProntos === 1
+              ? 'Cadastrar 1 API'
+              : 'Cadastrar ' + quantidadeArquivosProntos + ' APIs'
+        }}
       </button>
     </footer>
   </section>
@@ -675,7 +1001,7 @@
             <button
               type="button"
               class="link-danger"
-              [disabled]="filtrosEdicao.length === 1"
+              [disabled]="salvandoEdicao"
               (click)="removerFiltroEdicao(i)"
             >Remover</button>
           </div>
@@ -868,3 +1194,5 @@
     </footer>
   </section>
 </div>
+
+</ng-container>

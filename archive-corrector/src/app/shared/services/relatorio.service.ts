@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import {
   Observable,
@@ -12,6 +12,8 @@ import { environment } from '../../../environments/environment';
 import {
   FormatoExportacao,
   RelatorioCatalogo,
+  RelatorioGrupoAutomatico,
+  RelatorioLoteRequest,
   RelatorioTemplate,
   SguApiDefinicao,
   SguListaResponse,
@@ -23,6 +25,8 @@ export class RelatorioService {
   private readonly baseUrl = `${environment.apiUrl}/relatorios`;
   private readonly storageKey = 'unimed-tools.relatorios.v1';
   private readonly templateStorageKey = 'unimed-tools.relatorios.templates.v1';
+  private readonly grupoAutomaticoStorageKey =
+    'unimed-tools.relatorios.grupos-automaticos.v1';
 
   constructor(private readonly http: HttpClient) {}
 
@@ -43,6 +47,17 @@ export class RelatorioService {
 
   salvarTemplates(templates: RelatorioTemplate[]): void {
     this.salvarLocalStorage(this.templateStorageKey, templates);
+  }
+
+  listarGruposAutomaticos(): RelatorioGrupoAutomatico[] {
+    return this.lerLocalStorage<RelatorioGrupoAutomatico[]>(
+      this.grupoAutomaticoStorageKey,
+      []
+    );
+  }
+
+  salvarGruposAutomaticos(grupos: RelatorioGrupoAutomatico[]): void {
+    this.salvarLocalStorage(this.grupoAutomaticoStorageKey, grupos);
   }
 
   buscarApi(nome: string): Observable<SguApiDefinicao> {
@@ -209,6 +224,20 @@ export class RelatorioService {
       )}?formato=${formato}`,
       { filtros, nomeArquivo },
       { responseType: 'blob' }
+    );
+  }
+
+
+  exportarLote(
+    request: RelatorioLoteRequest
+  ): Observable<HttpResponse<Blob>> {
+    return this.http.post(
+      `${this.baseUrl}/sgu/exportar-lote`,
+      request,
+      {
+        observe: 'response',
+        responseType: 'blob',
+      }
     );
   }
 

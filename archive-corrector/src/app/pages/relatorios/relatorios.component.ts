@@ -7,7 +7,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize, timeout } from 'rxjs';
+import { finalize, firstValueFrom, timeout } from 'rxjs';
 
 import {
   FormatoExportacao,
@@ -18,17 +18,60 @@ import {
   SguResultado,
 } from '../../shared/models/relatorio.model';
 import { RelatorioService } from '../../shared/services/relatorio.service';
+import { RelatoriosAutomaticosComponent } from './relatorios-automaticos/relatorios-automaticos.component';
+import { RelatoriosInicioComponent } from './relatorios-inicio/relatorios-inicio.component';
 
-type ModoCadastro = 'existente' | 'lista' | 'nova';
+type ModoCadastro = 'existente' | 'lista' | 'nova' | 'arquivos';
+type ModoPaginaRelatorios = 'selecao' | 'manual' | 'automatico';
+
+type StatusArquivoSql = 'pendente' | 'criando' | 'sucesso' | 'erro';
+
+interface ArquivoSqlImportado {
+  id: string;
+  arquivoNome: string;
+  tamanhoBytes: number;
+  apiNome: string;
+  nomeExibicao: string;
+  descricao: string;
+  consultaSQL: string;
+  ordenacao: string;
+  filtros: SguFiltro[];
+  ajustesAplicados: string[];
+  detalhesAbertos: boolean;
+  status: StatusArquivoSql;
+  erro: string;
+}
+
+interface TokenSqlNivelZero {
+  palavra: string;
+  inicio: number;
+  fim: number;
+}
+
+interface EstruturaConsultaPrincipal {
+  select: TokenSqlNivelZero;
+  where?: TokenSqlNivelZero;
+  limiteCondicoes: number;
+  fimRamo: number;
+  operadorConjunto?: TokenSqlNivelZero;
+}
 
 @Component({
   selector: 'app-relatorios',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RelatoriosInicioComponent,
+    RelatoriosAutomaticosComponent,
+  ],
   templateUrl: './relatorios.component.html',
   styleUrls: ['./relatorios.component.scss'],
 })
 export class RelatoriosComponent implements OnInit, OnDestroy {
+  modoPagina: ModoPaginaRelatorios = 'selecao';
+  quantidadeGruposAutomaticos = 0;
+
   relatorios: RelatorioCatalogo[] = [];
   relatoriosFiltrados: RelatorioCatalogo[] = [];
   selecionado: RelatorioCatalogo | null = null;
@@ -64,6 +107,13 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   novaConsultaSql = '';
   novaOrdenacao = '';
   novosFiltros: SguFiltro[] = [this.filtroVazio()];
+
+  arquivosSqlImportados: ArquivoSqlImportado[] = [];
+  carregandoArquivosSql = false;
+  criandoApisEmLote = false;
+  arrastandoArquivosSql = false;
+  progressoCriacaoLote = 0;
+  totalCriacaoLote = 0;
 
   modalEditarAberto = false;
   carregandoEdicao = false;
@@ -101,6 +151,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   private inicioGeracao = 0;
   private readonly timeoutGeracaoMs = 120_000;
   private readonly timeoutExportacaoMs = 600_000;
+  private readonly nomeFiltroTecnicoSemFiltros = 'filtrotecnico';
   private readonly valoresFiltroPorRelatorio: Record<
     string,
     Record<string, string | number>
@@ -113,6 +164,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.relatorios = this.relatorioService.listarCatalogo();
+    this.atualizarQuantidadeGruposAutomaticos();
     this.templates = this.normalizarTemplates(
       this.relatorioService.listarTemplates()
     );
@@ -122,6 +174,24 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     if (this.relatorios.length) {
       this.selecionar(this.relatorios[0]);
     }
+  }
+
+  selecionarModoPagina(modo: Exclude<ModoPaginaRelatorios, 'selecao'>): void {
+    this.modoPagina = modo;
+    this.erro = '';
+    this.sucesso = '';
+  }
+
+  voltarSelecaoModo(): void {
+    this.modoPagina = 'selecao';
+    this.atualizarQuantidadeGruposAutomaticos();
+    this.erro = '';
+    this.sucesso = '';
+  }
+
+  private atualizarQuantidadeGruposAutomaticos(): void {
+    this.quantidadeGruposAutomaticos =
+      this.relatorioService.listarGruposAutomaticos().length;
   }
 
   ngOnDestroy(): void {
@@ -188,6 +258,12 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     this.novaConsultaSql = '';
     this.novaOrdenacao = '';
     this.novosFiltros = [this.filtroVazio()];
+    this.arquivosSqlImportados = [];
+    this.carregandoArquivosSql = false;
+    this.criandoApisEmLote = false;
+    this.arrastandoArquivosSql = false;
+    this.progressoCriacaoLote = 0;
+    this.totalCriacaoLote = 0;
     this.pesquisaApis = '';
     this.apisSelecionadas = {};
     this.erro = '';
@@ -197,7 +273,9 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     if (
       !this.buscandoApi &&
       !this.salvandoApi &&
-      !this.carregandoListaApis
+      !this.carregandoListaApis &&
+      !this.carregandoArquivosSql &&
+      !this.criandoApisEmLote
     ) {
       this.modalNovoAberto = false;
     }
@@ -233,7 +311,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       )
       .subscribe({
         next: api => {
-          this.apiEncontrada = api;
+          this.apiEncontrada = this.removerFiltroTecnicoDaDefinicao(api);
           this.novoNomeExibicao ||= this.tituloAPartirDoNome(api.nome);
         },
         error: err => {
@@ -369,35 +447,37 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   }
 
   criarNovaApi(): void {
-    const definicao: SguApiDefinicao = {
+    const definicaoNegocio: SguApiDefinicao = {
       nome: this.novoApiNome.trim(),
       consultaSQL: this.novaConsultaSql.trim(),
       ordenacao: this.novaOrdenacao.trim(),
       filtros: this.normalizarFiltros(this.novosFiltros),
     };
 
-    const validacao = this.validarNovaApi(definicao);
+    const validacao = this.validarNovaApi(definicaoNegocio);
 
     if (validacao) {
       this.erro = validacao;
       return;
     }
 
+    const definicaoSgu = this.prepararDefinicaoParaSgu(definicaoNegocio);
+
     this.salvandoApi = true;
     this.erro = '';
 
     this.relatorioService
-      .criarApi(definicao)
+      .criarApi(definicaoSgu)
       .pipe(
         timeout(this.timeoutGeracaoMs),
         finalize(() => (this.salvandoApi = false))
       )
       .subscribe({
         next: () => {
-          this.adicionarAoCatalogo(definicao);
+          this.adicionarAoCatalogo(definicaoNegocio);
           this.modalNovoAberto = false;
           this.listaApisCarregada = false;
-          this.sucesso = `A API ${definicao.nome} foi cadastrada e adicionada aos relatórios.`;
+          this.sucesso = `A API ${definicaoNegocio.nome} foi cadastrada e adicionada aos relatórios.`;
         },
         error: err => {
           this.erro = this.mensagemErro(
@@ -406,6 +486,300 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
           );
         },
       });
+  }
+
+
+  async selecionarArquivosSql(evento: Event): Promise<void> {
+    const input = evento.target as HTMLInputElement;
+    const arquivos = Array.from(input.files ?? []);
+    input.value = '';
+    await this.processarArquivosSql(arquivos);
+  }
+
+  aoArrastarArquivosSql(evento: DragEvent): void {
+    evento.preventDefault();
+    evento.stopPropagation();
+
+    if (!this.criandoApisEmLote) {
+      this.arrastandoArquivosSql = true;
+    }
+  }
+
+  aoSairDaAreaArquivosSql(evento: DragEvent): void {
+    evento.preventDefault();
+    evento.stopPropagation();
+    this.arrastandoArquivosSql = false;
+  }
+
+  async soltarArquivosSql(evento: DragEvent): Promise<void> {
+    evento.preventDefault();
+    evento.stopPropagation();
+    this.arrastandoArquivosSql = false;
+
+    if (this.criandoApisEmLote) return;
+
+    const arquivos = Array.from(evento.dataTransfer?.files ?? []);
+    await this.processarArquivosSql(arquivos);
+  }
+
+  removerArquivoSql(id: string): void {
+    if (this.criandoApisEmLote) return;
+
+    this.arquivosSqlImportados = this.arquivosSqlImportados.filter(
+      arquivo => arquivo.id !== id
+    );
+    this.erro = '';
+  }
+
+  alternarDetalhesArquivoSql(arquivo: ArquivoSqlImportado): void {
+    arquivo.detalhesAbertos = !arquivo.detalhesAbertos;
+  }
+
+  adicionarFiltroArquivoSql(arquivo: ArquivoSqlImportado): void {
+    arquivo.filtros.push(this.filtroVazio());
+    this.ajustarArquivoSql(arquivo);
+  }
+
+  removerFiltroArquivoSql(
+    arquivo: ArquivoSqlImportado,
+    indice: number
+  ): void {
+    arquivo.filtros.splice(indice, 1);
+    this.ajustarArquivoSql(arquivo);
+  }
+
+  ajustarArquivoSql(arquivo: ArquivoSqlImportado): void {
+    if (this.criandoApisEmLote) return;
+
+    const parametrosConvertidos = this.converterParametrosFixosSql(
+      arquivo.consultaSQL
+    );
+    const bindsNormalizados = this.normalizarVariaveisBindSql(
+      parametrosConvertidos.sql
+    );
+
+    const nomesExistentes = new Set(
+      arquivo.filtros.map(filtro => filtro.nomeFiltro.trim().toLowerCase())
+    );
+
+    for (const nome of bindsNormalizados.variaveis) {
+      if (!nomesExistentes.has(nome)) {
+        arquivo.filtros.push(this.filtroDetectadoDoSql(nome));
+        nomesExistentes.add(nome);
+      }
+    }
+
+    /*
+     * O SGU exige que o elemento filtros seja enviado mesmo quando a
+     * consulta não possui filtros de negócio. Por isso sempre deixamos o
+     * marcador preparado; no payload será incluído um filtro técnico
+     * opcional e invisível para o usuário quando necessário.
+     */
+    const resultado = this.ajustarEstruturaSqlImportado(
+      bindsNormalizados.sql,
+      true
+    );
+
+    arquivo.consultaSQL = resultado.sql;
+    arquivo.ajustesAplicados = Array.from(
+      new Set([
+        ...arquivo.ajustesAplicados,
+        ...parametrosConvertidos.ajustes,
+        ...resultado.ajustes,
+      ])
+    );
+    arquivo.status = 'pendente';
+    arquivo.erro = '';
+  }
+
+  erroArquivoSql(arquivo: ArquivoSqlImportado): string {
+    const nomeApi = arquivo.apiNome.trim();
+
+    if (nomeApi && !/^0090-[a-z0-9-]+$/.test(nomeApi)) {
+      return 'O nome da API deve começar com 0090- e usar apenas letras minúsculas, números e hífen.';
+    }
+
+    const repetidoNoLote = this.arquivosSqlImportados.filter(
+      item =>
+        item.apiNome.trim().toLowerCase() ===
+        arquivo.apiNome.trim().toLowerCase()
+    ).length > 1;
+
+    if (repetidoNoLote && arquivo.apiNome.trim()) {
+      return `O nome da API “${arquivo.apiNome.trim()}” está repetido no lote.`;
+    }
+
+    if (
+      this.relatorios.some(
+        relatorio =>
+          relatorio.apiNome.toLowerCase() ===
+          arquivo.apiNome.trim().toLowerCase()
+      )
+    ) {
+      return `A API “${arquivo.apiNome.trim()}” já está no catálogo. Use a opção Editar API.`;
+    }
+
+    return this.validarDefinicaoApi(
+      this.definicaoDoArquivoSql(arquivo),
+      arquivo.nomeExibicao
+    );
+  }
+
+  get quantidadeArquivosProntos(): number {
+    return this.arquivosSqlImportados.filter(
+      arquivo => !this.erroArquivoSql(arquivo)
+    ).length;
+  }
+
+  async criarApisDosArquivos(): Promise<void> {
+    if (
+      !this.arquivosSqlImportados.length ||
+      this.criandoApisEmLote
+    ) {
+      return;
+    }
+
+    this.erro = '';
+    this.sucesso = '';
+
+    let possuiErroLocal = false;
+
+    for (const arquivo of this.arquivosSqlImportados) {
+      this.ajustarArquivoSql(arquivo);
+      arquivo.status = 'pendente';
+      arquivo.erro = this.erroArquivoSql(arquivo);
+
+      if (arquivo.erro) {
+        arquivo.status = 'erro';
+        arquivo.detalhesAbertos = true;
+        possuiErroLocal = true;
+      }
+    }
+
+    if (possuiErroLocal) {
+      this.erro =
+        'Corrija os arquivos destacados antes de iniciar o cadastro em lote.';
+      return;
+    }
+
+    this.criandoApisEmLote = true;
+    this.progressoCriacaoLote = 0;
+    this.totalCriacaoLote = this.arquivosSqlImportados.length;
+
+    const criadas: Array<{
+      arquivo: ArquivoSqlImportado;
+      definicao: SguApiDefinicao;
+    }> = [];
+
+    try {
+      const apisExistentes = await firstValueFrom(
+        this.relatorioService
+          .listarApis()
+          .pipe(timeout(this.timeoutGeracaoMs))
+      );
+
+      const nomesExistentes = new Set(
+        (apisExistentes ?? []).map(api => api.nome.trim().toLowerCase())
+      );
+
+      for (const arquivo of this.arquivosSqlImportados) {
+        if (nomesExistentes.has(arquivo.apiNome.trim().toLowerCase())) {
+          arquivo.status = 'erro';
+          arquivo.erro =
+            `A API “${arquivo.apiNome.trim()}” já existe no SGU. Use a funcionalidade Editar API para substituí-la.`;
+          arquivo.detalhesAbertos = true;
+        }
+      }
+
+      const pendentes = this.arquivosSqlImportados.filter(
+        arquivo => arquivo.status !== 'erro'
+      );
+
+      this.totalCriacaoLote = pendentes.length;
+
+      for (const arquivo of pendentes) {
+        arquivo.status = 'criando';
+        arquivo.erro = '';
+        this.cdr.detectChanges();
+
+        const definicao = this.definicaoDoArquivoSql(arquivo);
+
+        try {
+          await firstValueFrom(
+            this.relatorioService
+              .criarApi(definicao)
+              .pipe(timeout(this.timeoutGeracaoMs))
+          );
+
+          arquivo.status = 'sucesso';
+          criadas.push({ arquivo, definicao });
+          nomesExistentes.add(definicao.nome.toLowerCase());
+        } catch (erroCriacao) {
+          arquivo.status = 'erro';
+          arquivo.erro = this.mensagemErro(
+            erroCriacao,
+            `Não foi possível cadastrar a API ${definicao.nome}.`
+          );
+          arquivo.detalhesAbertos = true;
+        } finally {
+          this.progressoCriacaoLote += 1;
+          this.cdr.detectChanges();
+        }
+      }
+    } catch (erroLista) {
+      this.erro = this.mensagemErro(
+        erroLista,
+        'Não foi possível verificar as APIs já cadastradas no SGU.'
+      );
+      return;
+    } finally {
+      this.criandoApisEmLote = false;
+      this.cdr.detectChanges();
+    }
+
+    if (criadas.length) {
+      const agora = new Date().toISOString();
+      const novosRelatorios: RelatorioCatalogo[] = criadas.map(
+        ({ arquivo, definicao }) => ({
+          id: this.gerarId(),
+          nomeExibicao: arquivo.nomeExibicao.trim(),
+          descricao: arquivo.descricao.trim(),
+          apiNome: definicao.nome,
+          filtros: this.filtrosDeNegocio(definicao.filtros),
+          criadoEm: agora,
+        })
+      );
+
+      this.relatorios = [...this.relatorios, ...novosRelatorios];
+      this.persistir();
+      this.aplicarPesquisa();
+      this.listaApisCarregada = false;
+      this.selecionar(novosRelatorios[0]);
+    }
+
+    const falhas = this.arquivosSqlImportados.filter(
+      arquivo => arquivo.status === 'erro'
+    );
+
+    if (!falhas.length) {
+      const quantidade = criadas.length;
+      this.modalNovoAberto = false;
+      this.arquivosSqlImportados = [];
+      this.sucesso =
+        quantidade === 1
+          ? 'A API do arquivo SQL foi cadastrada e adicionada aos relatórios.'
+          : `${quantidade} APIs foram cadastradas e adicionadas aos relatórios.`;
+      return;
+    }
+
+    this.arquivosSqlImportados = falhas;
+    this.erro =
+      `${falhas.length} arquivo(s) não foram cadastrado(s). ` +
+      'Corrija os erros exibidos e tente novamente.';
+
+    if (criadas.length) {
+      this.sucesso = `${criadas.length} API(s) foram cadastradas com sucesso.`;
+    }
   }
 
   abrirEdicao(
@@ -423,9 +797,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     this.editarDescricao = relatorio.descricao;
     this.editarConsultaSql = '';
     this.editarOrdenacao = '';
-    this.filtrosEdicao = relatorio.filtros.length
-      ? relatorio.filtros.map(filtro => ({ ...filtro }))
-      : [this.filtroVazio()];
+    this.filtrosEdicao = relatorio.filtros.map(filtro => ({ ...filtro }));
 
     this.modalEditarAberto = true;
     this.carregandoEdicao = true;
@@ -444,9 +816,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
           this.editarApiNome = api.nome;
           this.editarConsultaSql = api.consultaSQL ?? '';
           this.editarOrdenacao = api.ordenacao ?? '';
-          this.filtrosEdicao = Array.isArray(api.filtros) && api.filtros.length
-            ? api.filtros.map(filtro => ({ ...filtro }))
-            : [this.filtroVazio()];
+          this.filtrosEdicao = this.filtrosDeNegocio(api.filtros);
         },
         error: err => {
           this.erro = this.mensagemErro(
@@ -470,9 +840,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   }
 
   removerFiltroEdicao(indice: number): void {
-    if (this.filtrosEdicao.length > 1) {
-      this.filtrosEdicao.splice(indice, 1);
-    }
+    this.filtrosEdicao.splice(indice, 1);
   }
 
   salvarEdicaoApi(): void {
@@ -484,7 +852,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const novaDefinicao: SguApiDefinicao = {
+    const novaDefinicaoNegocio: SguApiDefinicao = {
       nome: this.editarApiNome.trim(),
       consultaSQL: this.editarConsultaSql.trim(),
       ordenacao: this.editarOrdenacao.trim(),
@@ -492,7 +860,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     };
 
     const validacao = this.validarDefinicaoApi(
-      novaDefinicao,
+      novaDefinicaoNegocio,
       this.editarNomeExibicao
     );
 
@@ -501,6 +869,9 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const novaDefinicaoSgu = this.prepararDefinicaoParaSgu(
+      novaDefinicaoNegocio
+    );
     const nomeAnterior = this.relatorioEmEdicao.apiNome;
     const idRelatorio = this.relatorioEmEdicao.id;
     const definicaoAnterior = this.clonarDefinicaoApi(
@@ -515,7 +886,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       .substituirApi(
         nomeAnterior,
         definicaoAnterior,
-        novaDefinicao
+        novaDefinicaoSgu
       )
       .pipe(
         timeout(this.timeoutGeracaoMs),
@@ -527,8 +898,10 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
             ...this.relatorioEmEdicao!,
             nomeExibicao: this.editarNomeExibicao.trim(),
             descricao: this.editarDescricao.trim(),
-            apiNome: novaDefinicao.nome,
-            filtros: novaDefinicao.filtros.map(filtro => ({ ...filtro })),
+            apiNome: novaDefinicaoNegocio.nome,
+            filtros: this.filtrosDeNegocio(
+              novaDefinicaoNegocio.filtros
+            ),
           };
 
           this.atualizarRelatorioEditado(atualizado);
@@ -538,9 +911,9 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
           this.apiOriginalEdicao = null;
 
           this.sucesso =
-            nomeAnterior === novaDefinicao.nome
-              ? `A API ${novaDefinicao.nome} foi substituída com sucesso.`
-              : `A API ${nomeAnterior} foi substituída por ${novaDefinicao.nome}.`;
+            nomeAnterior === novaDefinicaoNegocio.nome
+              ? `A API ${novaDefinicaoNegocio.nome} foi substituída com sucesso.`
+              : `A API ${nomeAnterior} foi substituída por ${novaDefinicaoNegocio.nome}.`;
 
           const selecionadoAtualizado = this.relatorios.find(
             relatorio => relatorio.id === idRelatorio
@@ -909,6 +1282,13 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     return relatorio.id;
   }
 
+  trackByArquivoSqlId(
+    _indice: number,
+    arquivo: ArquivoSqlImportado
+  ): string {
+    return arquivo.id;
+  }
+
   trackByTemplateId(
     _indice: number,
     template: RelatorioTemplate
@@ -1046,16 +1426,791 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     return parametros;
   }
 
+  private async processarArquivosSql(
+    arquivos: File[]
+  ): Promise<void> {
+    if (!arquivos.length || this.criandoApisEmLote) return;
+
+    const extensoesAceitas = new Set(['sql', 'txt']);
+    const validos = arquivos.filter(arquivo => {
+      const extensao = arquivo.name.split('.').pop()?.toLowerCase() ?? '';
+      return extensoesAceitas.has(extensao);
+    });
+
+    const ignorados = arquivos.length - validos.length;
+
+    if (!validos.length) {
+      this.erro = 'Selecione arquivos com extensão .sql ou .txt.';
+      return;
+    }
+
+    this.carregandoArquivosSql = true;
+    this.erro = '';
+
+    try {
+      const importados = await Promise.all(
+        validos.map(async arquivo => {
+          const textoOriginal = await arquivo.text();
+          const textoSemBom = textoOriginal.replace(/^\uFEFF/, '').trim();
+          const consultaSemPontoVirgula = textoSemBom.replace(/;\s*$/, '');
+          const nomeBase = arquivo.name.replace(/\.(sql|txt)$/i, '');
+
+          const importado: ArquivoSqlImportado = {
+            id: this.gerarId(),
+            arquivoNome: arquivo.name,
+            tamanhoBytes: arquivo.size,
+            apiNome: this.nomeApiAPartirDoArquivo(nomeBase),
+            nomeExibicao: this.tituloAPartirDoNome(nomeBase),
+            descricao: `Importado do arquivo ${arquivo.name}`,
+            consultaSQL: consultaSemPontoVirgula,
+            ordenacao: '',
+            filtros: [],
+            ajustesAplicados: [],
+            detalhesAbertos: false,
+            status: 'pendente',
+            erro: textoSemBom ? '' : 'O arquivo SQL está vazio.',
+          };
+
+          if (textoSemBom) {
+            this.ajustarArquivoSql(importado);
+          }
+
+          return importado;
+        })
+      );
+
+      this.arquivosSqlImportados = [
+        ...this.arquivosSqlImportados,
+        ...importados,
+      ];
+
+      if (ignorados) {
+        this.erro = `${ignorados} arquivo(s) foram ignorados porque não possuem extensão .sql ou .txt.`;
+      }
+    } catch (erroLeitura) {
+      this.erro =
+        erroLeitura instanceof Error
+          ? `Não foi possível ler os arquivos: ${erroLeitura.message}`
+          : 'Não foi possível ler os arquivos selecionados.';
+    } finally {
+      this.carregandoArquivosSql = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private definicaoDoArquivoSql(
+    arquivo: ArquivoSqlImportado
+  ): SguApiDefinicao {
+    return this.prepararDefinicaoParaSgu({
+      nome: arquivo.apiNome.trim(),
+      consultaSQL: arquivo.consultaSQL,
+      ordenacao: arquivo.ordenacao.trim(),
+      filtros: this.normalizarFiltros(arquivo.filtros),
+    });
+  }
+
+  private nomeApiAPartirDoArquivo(nomeArquivo: string): string {
+    const base = nomeArquivo
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (/^\d{4}-/.test(base)) return base;
+    return `0090-${base || 'nova-api'}`;
+  }
+
+  private filtroDetectadoDoSql(nome: string): SguFiltro {
+    const tipo = this.inferirTipoFiltroSql(nome);
+
+    if (nome === 'competencia' || nome === 'compet') {
+      return {
+        nomeFiltro: nome,
+        conteudoFiltro:
+          `and TO_NUMBER(:${nome}) BETWEEN 190001 AND 299912`,
+        tipoDadoFiltro: 'NUMBER',
+        mascaraFiltro: '',
+        obrigatorioFiltro: 'S',
+      };
+    }
+
+    return {
+      nomeFiltro: nome,
+      conteudoFiltro: `and :${nome} is not null`,
+      tipoDadoFiltro: tipo,
+      mascaraFiltro: tipo === 'DATE' ? 'DD/MM/YYYY' : '',
+      obrigatorioFiltro: 'S',
+    };
+  }
+
+  private inferirTipoFiltroSql(nome: string): string {
+    const normalizado = nome.toLowerCase();
+
+    if (
+      /(^|_)(data|dt)(_|$)/.test(normalizado) ||
+      normalizado.includes('nascimento') ||
+      normalizado.includes('vencimento')
+    ) {
+      return 'DATE';
+    }
+
+    if (
+      /(empresas|itens|codigos|nomes|lista|ids)$/.test(normalizado)
+    ) {
+      return 'VARCHAR(4000)';
+    }
+
+    if (
+      /(competencia|ano|mes|codigo|cod|id|numero|nro|grupo|unimed|empresa)$/.test(
+        normalizado
+      )
+    ) {
+      return 'NUMBER';
+    }
+
+    return 'VARCHAR(4000)';
+  }
+
+  private converterParametrosFixosSql(sqlOriginal: string): {
+    sql: string;
+    ajustes: string[];
+  } {
+    let sql = sqlOriginal;
+    const ajustes: string[] = [];
+    const regexCte = /\b(PARAM|PARAMETROS)\s+AS\s*\(/gi;
+    let correspondencia: RegExpExecArray | null;
+
+    while ((correspondencia = regexCte.exec(sql)) !== null) {
+      const inicioAbertura =
+        correspondencia.index + correspondencia[0].lastIndexOf('(');
+      const fimAbertura = this.encontrarFechamentoParentesesSql(
+        sql,
+        inicioAbertura
+      );
+
+      if (fimAbertura < 0) continue;
+
+      const blocoOriginal = sql.slice(inicioAbertura + 1, fimAbertura);
+
+      if (/:competencia\b/i.test(blocoOriginal)) {
+        continue;
+      }
+
+      const indicaCompetencia =
+        /\bAS\s+COMPET(?:ENCIA)?\b/i.test(blocoOriginal) ||
+        /filtros?\s*:?\s*compet[eê]ncia/i.test(blocoOriginal);
+
+      if (!indicaCompetencia) continue;
+
+      const valoresEncontrados = new Set<string>();
+      let blocoAjustado = blocoOriginal;
+
+      blocoAjustado = blocoAjustado.replace(
+        /TO_DATE\s*\(\s*'(\d{6})'\s*,\s*'YYYYMM'\s*\)/gi,
+        (_trecho, valor: string) => {
+          valoresEncontrados.add(valor);
+          return "TO_DATE(TO_CHAR(:competencia), 'YYYYMM')";
+        }
+      );
+
+      blocoAjustado = blocoAjustado.replace(
+        /'(\d{6})'\s+AS\s+(COMPET(?:ENCIA)?)\b/gi,
+        (_trecho, valor: string, alias: string) => {
+          valoresEncontrados.add(valor);
+          return `TO_CHAR(:competencia) AS ${alias}`;
+        }
+      );
+
+      blocoAjustado = blocoAjustado.replace(
+        /\b(\d{6})\s+AS\s+(COMPET(?:ENCIA)?)\b/gi,
+        (_trecho, valor: string, alias: string) => {
+          valoresEncontrados.add(valor);
+          return `TO_NUMBER(:competencia) AS ${alias}`;
+        }
+      );
+
+      if (blocoAjustado === blocoOriginal) continue;
+
+      sql =
+        sql.slice(0, inicioAbertura + 1) +
+        blocoAjustado +
+        sql.slice(fimAbertura);
+
+      const valores = Array.from(valoresEncontrados);
+      const cteNome = correspondencia[1].toUpperCase();
+
+      ajustes.push(
+        valores.length
+          ? `A competência fixa ${valores.join(
+              ', '
+            )} da CTE ${cteNome} foi transformada no filtro :competencia.`
+          : `A competência fixa da CTE ${cteNome} foi transformada no filtro :competencia.`
+      );
+
+      break;
+    }
+
+    return { sql, ajustes };
+  }
+
+  private encontrarFechamentoParentesesSql(
+    sql: string,
+    indiceAbertura: number
+  ): number {
+    let profundidade = 0;
+    let indice = indiceAbertura;
+    let estado:
+      | 'normal'
+      | 'texto'
+      | 'identificador'
+      | 'linha'
+      | 'bloco' = 'normal';
+
+    while (indice < sql.length) {
+      const atual = sql[indice];
+      const proximo = sql[indice + 1] ?? '';
+
+      if (estado === 'texto') {
+        if (atual === "'" && proximo === "'") {
+          indice += 2;
+          continue;
+        }
+
+        if (atual === "'") estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'identificador') {
+        if (atual === '"' && proximo === '"') {
+          indice += 2;
+          continue;
+        }
+
+        if (atual === '"') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'linha') {
+        if (atual === '\n') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'bloco') {
+        if (atual === '*' && proximo === '/') {
+          indice += 2;
+          estado = 'normal';
+          continue;
+        }
+
+        indice += 1;
+        continue;
+      }
+
+      if (atual === "'") {
+        estado = 'texto';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '"') {
+        estado = 'identificador';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '-' && proximo === '-') {
+        estado = 'linha';
+        indice += 2;
+        continue;
+      }
+
+      if (atual === '/' && proximo === '*') {
+        estado = 'bloco';
+        indice += 2;
+        continue;
+      }
+
+      if (atual === '(') {
+        profundidade += 1;
+      } else if (atual === ')') {
+        profundidade -= 1;
+
+        if (profundidade === 0) {
+          return indice;
+        }
+      }
+
+      indice += 1;
+    }
+
+    return -1;
+  }
+
+  private normalizarVariaveisBindSql(sql: string): {
+    sql: string;
+    variaveis: string[];
+  } {
+    let resultado = '';
+    let indice = 0;
+    let estado: 'normal' | 'texto' | 'linha' | 'bloco' = 'normal';
+    const variaveis: string[] = [];
+
+    while (indice < sql.length) {
+      const atual = sql[indice];
+      const proximo = sql[indice + 1] ?? '';
+
+      if (estado === 'texto') {
+        resultado += atual;
+
+        if (atual === "'" && proximo === "'") {
+          resultado += proximo;
+          indice += 2;
+          continue;
+        }
+
+        if (atual === "'") estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'linha') {
+        resultado += atual;
+        if (atual === '\n') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'bloco') {
+        resultado += atual;
+        if (atual === '*' && proximo === '/') {
+          resultado += proximo;
+          indice += 2;
+          estado = 'normal';
+          continue;
+        }
+        indice += 1;
+        continue;
+      }
+
+      if (atual === "'") {
+        resultado += atual;
+        estado = 'texto';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '-' && proximo === '-') {
+        resultado += atual + proximo;
+        indice += 2;
+        estado = 'linha';
+        continue;
+      }
+
+      if (atual === '/' && proximo === '*') {
+        resultado += atual + proximo;
+        indice += 2;
+        estado = 'bloco';
+        continue;
+      }
+
+      if (atual === ':' && /[A-Za-z_]/.test(proximo)) {
+        let fim = indice + 2;
+        while (fim < sql.length && /[A-Za-z0-9_]/.test(sql[fim])) {
+          fim += 1;
+        }
+
+        const nome = sql.slice(indice + 1, fim).toLowerCase();
+        resultado += `:${nome}`;
+
+        if (!variaveis.includes(nome)) {
+          variaveis.push(nome);
+        }
+
+        indice = fim;
+        continue;
+      }
+
+      resultado += atual;
+      indice += 1;
+    }
+
+    return { sql: resultado, variaveis };
+  }
+
+  private ajustarEstruturaSqlImportado(
+    sqlOriginal: string,
+    possuiFiltros: boolean
+  ): { sql: string; ajustes: string[] } {
+    let sql = sqlOriginal
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .replace(/;\s*$/, '');
+    const ajustes: string[] = [];
+
+    if (!sql) return { sql, ajustes };
+
+    let estrutura = this.localizarConsultaPrincipal(sql);
+    if (!estrutura) return { sql, ajustes };
+
+    if (possuiFiltros) {
+      const marcador = '/*FILTROS*/';
+      const posicaoMarcador = sql.indexOf(marcador);
+
+      if (
+        posicaoMarcador >= estrutura.select.inicio &&
+        posicaoMarcador < estrutura.fimRamo
+      ) {
+        sql =
+          sql.slice(0, posicaoMarcador) +
+          sql.slice(posicaoMarcador + marcador.length);
+        ajustes.push(
+          'O marcador /*FILTROS*/ foi reposicionado no final do WHERE principal.'
+        );
+        estrutura = this.localizarConsultaPrincipal(sql);
+
+        if (!estrutura) return { sql, ajustes };
+      }
+    }
+
+    if (estrutura.where) {
+      const trechoCondicoes = sql.slice(
+        estrutura.where.fim,
+        estrutura.limiteCondicoes
+      );
+      const trechoAnalisavel = this.removerComentariosSql(
+        trechoCondicoes.replace(/\/\*FILTROS\*\//g, '')
+      );
+
+      if (!/\b1\s*=\s*1\b/i.test(trechoAnalisavel)) {
+        const possuiCondicao = trechoAnalisavel.trim().length > 0;
+        const complemento = possuiCondicao
+          ? ' 1 = 1\n  AND'
+          : ' 1 = 1';
+
+        sql =
+          sql.slice(0, estrutura.where.fim) +
+          complemento +
+          sql.slice(estrutura.where.fim);
+        ajustes.push('Foi adicionado 1 = 1 ao WHERE principal.');
+        estrutura = this.localizarConsultaPrincipal(sql);
+
+        if (!estrutura) return { sql, ajustes };
+      }
+    } else {
+      sql = this.inserirClausulaSql(
+        sql,
+        estrutura.limiteCondicoes,
+        'WHERE 1 = 1'
+      );
+      ajustes.push('Foi adicionada a cláusula WHERE 1 = 1.');
+      estrutura = this.localizarConsultaPrincipal(sql);
+
+      if (!estrutura) return { sql, ajustes };
+    }
+
+    if (possuiFiltros && !sql.includes('/*FILTROS*/')) {
+      sql = this.inserirClausulaSql(
+        sql,
+        estrutura.limiteCondicoes,
+        '  /*FILTROS*/'
+      );
+      ajustes.push('Foi adicionado o marcador /*FILTROS*/.');
+    }
+
+    if (estrutura.operadorConjunto) {
+      ajustes.push(
+        'A consulta usa UNION, MINUS ou INTERSECT; revise se o marcador ficou no bloco correto.'
+      );
+    }
+
+    return {
+      sql: sql.trim().replace(/;\s*$/, ''),
+      ajustes: Array.from(new Set(ajustes)),
+    };
+  }
+
+  private localizarConsultaPrincipal(
+    sql: string
+  ): EstruturaConsultaPrincipal | null {
+    const tokens = this.tokensSqlNivelZero(sql);
+    const indiceSelect = tokens.findIndex(
+      token => token.palavra === 'SELECT'
+    );
+
+    if (indiceSelect < 0) return null;
+
+    const select = tokens[indiceSelect];
+    const tokensDepoisSelect = tokens.slice(indiceSelect + 1);
+    const operadorConjunto = tokensDepoisSelect.find(token =>
+      ['UNION', 'MINUS', 'INTERSECT'].includes(token.palavra)
+    );
+    const fimRamo = operadorConjunto?.inicio ?? sql.length;
+
+    const tokensDoRamo = tokensDepoisSelect.filter(
+      token => token.inicio < fimRamo
+    );
+    const where = tokensDoRamo.find(
+      token => token.palavra === 'WHERE'
+    );
+
+    const inicioBuscaLimite = where?.fim ?? select.fim;
+    const palavrasLimite = new Set([
+      'GROUP',
+      'HAVING',
+      'ORDER',
+      'CONNECT',
+      'START',
+      'MODEL',
+      'QUALIFY',
+      'FETCH',
+      'OFFSET',
+      'FOR',
+    ]);
+
+    const proximaClausula = tokensDoRamo.find(
+      token =>
+        token.inicio >= inicioBuscaLimite &&
+        palavrasLimite.has(token.palavra)
+    );
+
+    return {
+      select,
+      where,
+      limiteCondicoes: proximaClausula?.inicio ?? fimRamo,
+      fimRamo,
+      operadorConjunto,
+    };
+  }
+
+  private tokensSqlNivelZero(sql: string): TokenSqlNivelZero[] {
+    const tokens: TokenSqlNivelZero[] = [];
+    let indice = 0;
+    let profundidade = 0;
+    let estado:
+      | 'normal'
+      | 'texto'
+      | 'identificador'
+      | 'linha'
+      | 'bloco' = 'normal';
+
+    while (indice < sql.length) {
+      const atual = sql[indice];
+      const proximo = sql[indice + 1] ?? '';
+
+      if (estado === 'texto') {
+        if (atual === "'" && proximo === "'") {
+          indice += 2;
+          continue;
+        }
+
+        if (atual === "'") estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'identificador') {
+        if (atual === '"' && proximo === '"') {
+          indice += 2;
+          continue;
+        }
+
+        if (atual === '"') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'linha') {
+        if (atual === '\n') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'bloco') {
+        if (atual === '*' && proximo === '/') {
+          indice += 2;
+          estado = 'normal';
+          continue;
+        }
+
+        indice += 1;
+        continue;
+      }
+
+      if (atual === "'") {
+        estado = 'texto';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '"') {
+        estado = 'identificador';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '-' && proximo === '-') {
+        estado = 'linha';
+        indice += 2;
+        continue;
+      }
+
+      if (atual === '/' && proximo === '*') {
+        estado = 'bloco';
+        indice += 2;
+        continue;
+      }
+
+      if (atual === '(') {
+        profundidade += 1;
+        indice += 1;
+        continue;
+      }
+
+      if (atual === ')') {
+        profundidade = Math.max(0, profundidade - 1);
+        indice += 1;
+        continue;
+      }
+
+      if (
+        profundidade === 0 &&
+        /[A-Za-z_]/.test(atual)
+      ) {
+        let fim = indice + 1;
+
+        while (
+          fim < sql.length &&
+          /[A-Za-z0-9_$#]/.test(sql[fim])
+        ) {
+          fim += 1;
+        }
+
+        tokens.push({
+          palavra: sql.slice(indice, fim).toUpperCase(),
+          inicio: indice,
+          fim,
+        });
+        indice = fim;
+        continue;
+      }
+
+      indice += 1;
+    }
+
+    return tokens;
+  }
+
+  private removerComentariosSql(sql: string): string {
+    return sql
+      .replace(/--[^\r\n]*/g, ' ')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+  }
+
+  private inserirClausulaSql(
+    sql: string,
+    posicao: number,
+    clausula: string
+  ): string {
+    const antes = sql.slice(0, posicao).replace(/[ \t]+$/g, '');
+    const depois = sql.slice(posicao).replace(/^[ \t]+/g, '');
+    const quebraAntes = antes.endsWith('\n') ? '' : '\n';
+    const quebraDepois = depois
+      ? depois.startsWith('\n')
+        ? ''
+        : '\n'
+      : '';
+
+    return `${antes}${quebraAntes}${clausula}${quebraDepois}${depois}`;
+  }
+
+  formatarTamanhoArquivo(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   private normalizarFiltros(filtros: SguFiltro[]): SguFiltro[] {
-    return filtros.map(filtro => ({
-      ...filtro,
-      nomeFiltro: filtro.nomeFiltro.trim(),
-      conteudoFiltro: filtro.conteudoFiltro.trim(),
-      tipoDadoFiltro: filtro.tipoDadoFiltro.trim().toUpperCase(),
-      mascaraFiltro: filtro.mascaraFiltro.trim(),
-      obrigatorioFiltro:
-        filtro.obrigatorioFiltro === 'S' ? 'S' : 'N',
-    }));
+    return (filtros ?? [])
+      .map((filtro): SguFiltro => ({
+        ...filtro,
+        nomeFiltro: filtro.nomeFiltro.trim(),
+        conteudoFiltro: filtro.conteudoFiltro.trim(),
+        tipoDadoFiltro: filtro.tipoDadoFiltro.trim().toUpperCase(),
+        mascaraFiltro: filtro.mascaraFiltro.trim(),
+        obrigatorioFiltro:
+          filtro.obrigatorioFiltro === 'S' ? 'S' : 'N',
+      }))
+      .filter(
+        filtro =>
+          Boolean(filtro.nomeFiltro) ||
+          Boolean(
+            filtro.conteudoFiltro &&
+            filtro.conteudoFiltro.toLowerCase() !== 'and'
+          )
+      );
+  }
+
+  private filtroTecnicoSemFiltros(): SguFiltro {
+    return {
+      nomeFiltro: this.nomeFiltroTecnicoSemFiltros,
+      conteudoFiltro:
+        `and :${this.nomeFiltroTecnicoSemFiltros} is null`,
+      tipoDadoFiltro: 'VARCHAR(1)',
+      mascaraFiltro: '',
+      obrigatorioFiltro: 'N',
+    };
+  }
+
+  private ehFiltroTecnicoSemFiltros(filtro: SguFiltro): boolean {
+    return (
+      filtro?.nomeFiltro?.trim().toLowerCase() ===
+        this.nomeFiltroTecnicoSemFiltros &&
+      filtro?.conteudoFiltro?.trim().toLowerCase() ===
+        `and :${this.nomeFiltroTecnicoSemFiltros} is null` &&
+      filtro?.obrigatorioFiltro !== 'S'
+    );
+  }
+
+  private filtrosDeNegocio(
+    filtros: SguFiltro[] | null | undefined
+  ): SguFiltro[] {
+    return this.normalizarFiltros(filtros ?? [])
+      .filter(filtro => !this.ehFiltroTecnicoSemFiltros(filtro))
+      .map(filtro => ({ ...filtro }));
+  }
+
+  private removerFiltroTecnicoDaDefinicao(
+    api: SguApiDefinicao
+  ): SguApiDefinicao {
+    return {
+      ...api,
+      filtros: this.filtrosDeNegocio(api.filtros),
+    };
+  }
+
+  private prepararDefinicaoParaSgu(
+    api: SguApiDefinicao
+  ): SguApiDefinicao {
+    const filtrosNegocio = this.filtrosDeNegocio(api.filtros);
+    const filtrosSgu = filtrosNegocio.length
+      ? filtrosNegocio
+      : [this.filtroTecnicoSemFiltros()];
+
+    const sqlAjustado = this.ajustarEstruturaSqlImportado(
+      api.consultaSQL,
+      true
+    );
+
+    return {
+      nome: api.nome.trim(),
+      consultaSQL: sqlAjustado.sql,
+      ordenacao: api.ordenacao?.trim() ?? '',
+      filtros: filtrosSgu,
+    };
   }
 
   private clonarDefinicaoApi(
@@ -1110,7 +2265,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
         this.tituloAPartirDoNome(api.nome),
       descricao: this.novaDescricao.trim(),
       apiNome: api.nome,
-      filtros: Array.isArray(api.filtros) ? api.filtros : [],
+      filtros: this.filtrosDeNegocio(api.filtros),
       criadoEm: existente?.criadoEm ?? new Date().toISOString(),
     };
 
@@ -1197,11 +2352,15 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     }
 
     if (!api.filtros.length) {
-      return 'Adicione pelo menos um filtro.';
+      if (!/\bwhere\s+1\s*=\s*1\b/i.test(api.consultaSQL)) {
+        return 'Consultas sem filtros devem conter WHERE 1 = 1.';
+      }
+
+      return '';
     }
 
     if (!api.consultaSQL.includes('/*FILTROS*/')) {
-      return 'A consulta SQL deve conter o marcador /*FILTROS*/.';
+      return 'A consulta SQL deve conter o marcador /*FILTROS*/ quando possuir filtros.';
     }
 
     for (const [indice, filtro] of api.filtros.entries()) {
@@ -1280,7 +2439,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
         nome,
         consultaSQL: api.consultaSQL ?? '',
         ordenacao: api.ordenacao ?? '',
-        filtros: Array.isArray(api.filtros) ? api.filtros : [],
+        filtros: this.filtrosDeNegocio(api.filtros),
       });
     }
 

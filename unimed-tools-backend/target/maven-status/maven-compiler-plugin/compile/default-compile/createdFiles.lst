@@ -1,10 +1,12 @@
 com\unimedlorena\tools\service\AnsService.class
 com\unimedlorena\tools\service\XmlService.class
 com\unimedlorena\tools\dto\RelatorioExportacaoRequest.class
+com\unimedlorena\tools\dto\RelatorioLoteRequest$Item.class
 com\unimedlorena\tools\service\EspecialidadeService$1.class
 com\unimedlorena\tools\controller\XmlController.class
 com\unimedlorena\tools\controller\EspecialidadeController.class
 com\unimedlorena\tools\dto\AnsResultado.class
+com\unimedlorena\tools\dto\RelatorioLoteRequest.class
 com\unimedlorena\tools\controller\AnsController.class
 com\unimedlorena\tools\service\EspecialidadeService$Resultado.class
 com\unimedlorena\tools\service\AnsService$Resultado.class
@@ -15,12 +17,14 @@ com\unimedlorena\tools\service\EspecialidadeService.class
 com\unimedlorena\tools\GlobalExceptionHandler.class
 com\unimedlorena\tools\service\AnsService$1.class
 com\unimedlorena\tools\service\AnsService$Filtros.class
+com\unimedlorena\tools\service\ExportacaoLoteRelatorioService$Resultado.class
 com\unimedlorena\tools\CorsConfig.class
 com\unimedlorena\tools\controller\HealthController.class
 com\unimedlorena\tools\controller\RelatorioController.class
 com\unimedlorena\tools\service\ExportacaoRelatorioService$Arquivo.class
 com\unimedlorena\tools\dto\EspecialidadeStats.class
 com\unimedlorena\tools\service\ExportacaoRelatorioService.class
+com\unimedlorena\tools\service\ExportacaoLoteRelatorioService.class
 com\unimedlorena\tools\service\SguRelatorioService.class
 com\unimedlorena\tools\dto\XmlAnaliseResponse.class
 com\unimedlorena\tools\service\SguRelatorioService$2.class

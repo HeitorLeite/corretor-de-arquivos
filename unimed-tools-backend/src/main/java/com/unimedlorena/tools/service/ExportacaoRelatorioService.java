@@ -3,14 +3,29 @@ package com.unimedlorena.tools.service;
 import com.unimedlorena.tools.dto.RelatorioExportacaoRequest;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class ExportacaoRelatorioService {
@@ -34,34 +49,19 @@ public class ExportacaoRelatorioService {
             String apiNome,
             String formato,
             RelatorioExportacaoRequest request) throws IOException {
-        List<LinkedHashMap<String, Object>> registros = carregarTodos(
+        List<LinkedHashMap<String, Object>> registros = carregarRegistros(
             apiNome,
             request == null ? null : request.filtros()
         );
-        String tipo = formato == null ? "xlsx" : formato.toLowerCase(Locale.ROOT);
-        return switch (tipo) {
-            case "csv" -> new Arquivo(
-                gerarCsv(registros, ';'),
-                "text/csv; charset=UTF-8",
-                "csv"
-            );
-            case "txt" -> new Arquivo(
-                gerarTxt(registros),
-                "text/plain; charset=UTF-8",
-                "txt"
-            );
-            case "xlsx" -> new Arquivo(
-                gerarXlsx(registros),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "xlsx"
-            );
-            default -> throw new IllegalArgumentException(
-                "Formato inválido. Use csv, txt ou xlsx."
-            );
-        };
+        return gerarArquivo(formato, registros);
     }
 
-    private List<LinkedHashMap<String, Object>> carregarTodos(
+    /**
+     * Carrega todas as páginas de uma API do SGU. O método é público para que
+     * a exportação em lote possa reunir vários valores do mesmo filtro em um
+     * único arquivo final.
+     */
+    public List<LinkedHashMap<String, Object>> carregarRegistros(
             String apiNome,
             Map<String, Object> filtros) {
         List<LinkedHashMap<String, Object>> todos = new ArrayList<>();
@@ -74,37 +74,84 @@ public class ExportacaoRelatorioService {
             parametros.put("size", tamanhoLote);
 
             Map<String, Object> resposta = sgu.executar(apiNome, parametros);
-            List<LinkedHashMap<String, Object>> lote = extrairRegistros(resposta.get("content"));
+            List<LinkedHashMap<String, Object>> lote = extrairRegistros(
+                resposta.get("content")
+            );
+
             if (lote.isEmpty()) break;
 
             String assinatura = assinatura(lote);
             if (pagina > 1 && assinatura.equals(assinaturaAnterior)) {
                 throw new IllegalStateException(
-                    "A API repetiu a mesma página durante a exportação. Verifique a paginação do endpoint."
+                    "A API repetiu a mesma página durante a exportação. " +
+                    "Verifique a paginação do endpoint."
                 );
             }
+
             assinaturaAnterior = assinatura;
             todos.addAll(lote);
 
-            if (Boolean.TRUE.equals(resposta.get("last")) || lote.size() < tamanhoLote) break;
+            if (Boolean.TRUE.equals(resposta.get("last")) ||
+                    lote.size() < tamanhoLote) {
+                break;
+            }
         }
 
-        if (todos.isEmpty()) return List.of();
         if (todos.size() >= (long) tamanhoLote * maximoPaginas) {
             throw new IllegalStateException(
                 "O relatório atingiu o limite de páginas configurado no backend."
             );
         }
+
         return todos;
+    }
+
+    /**
+     * Converte uma lista já carregada no formato solicitado.
+     */
+    public Arquivo gerarArquivo(
+            String formato,
+            List<LinkedHashMap<String, Object>> registros) throws IOException {
+        String tipo = formato == null
+            ? "xlsx"
+            : formato.toLowerCase(Locale.ROOT);
+
+        List<LinkedHashMap<String, Object>> dados = registros == null
+            ? List.of()
+            : registros;
+
+        return switch (tipo) {
+            case "csv" -> new Arquivo(
+                gerarCsv(dados, ';'),
+                "text/csv; charset=UTF-8",
+                "csv"
+            );
+            case "txt" -> new Arquivo(
+                gerarTxt(dados),
+                "text/plain; charset=UTF-8",
+                "txt"
+            );
+            case "xlsx" -> new Arquivo(
+                gerarXlsx(dados),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "xlsx"
+            );
+            default -> throw new IllegalArgumentException(
+                "Formato inválido. Use csv, txt ou xlsx."
+            );
+        };
     }
 
     private List<LinkedHashMap<String, Object>> extrairRegistros(Object content) {
         if (!(content instanceof List<?> lista)) return List.of();
+
         List<LinkedHashMap<String, Object>> registros = new ArrayList<>();
         for (Object item : lista) {
             if (item instanceof Map<?, ?> mapa) {
                 LinkedHashMap<String, Object> registro = new LinkedHashMap<>();
-                mapa.forEach((chave, valor) -> registro.put(String.valueOf(chave), valor));
+                mapa.forEach(
+                    (chave, valor) -> registro.put(String.valueOf(chave), valor)
+                );
                 registros.add(registro);
             }
         }
@@ -115,10 +162,12 @@ public class ExportacaoRelatorioService {
         return lote.size() + "|" + lote.get(0) + "|" + lote.get(lote.size() - 1);
     }
 
-    private byte[] gerarCsv(List<LinkedHashMap<String, Object>> registros, char delimitador)
-            throws IOException {
+    private byte[] gerarCsv(
+            List<LinkedHashMap<String, Object>> registros,
+            char delimitador) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         escreverBom(out);
+
         try (
             Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8);
             CSVPrinter printer = new CSVPrinter(
@@ -131,46 +180,61 @@ public class ExportacaoRelatorioService {
         ) {
             List<String> colunas = colunas(registros);
             if (!colunas.isEmpty()) printer.printRecord(colunas);
+
             for (Map<String, Object> registro : registros) {
-                printer.printRecord(colunas.stream().map(coluna -> texto(registro.get(coluna))).toList());
+                printer.printRecord(
+                    colunas.stream()
+                        .map(coluna -> texto(registro.get(coluna)))
+                        .toList()
+                );
             }
         }
+
         return out.toByteArray();
     }
 
-    private byte[] gerarTxt(List<LinkedHashMap<String, Object>> registros) throws IOException {
+    private byte[] gerarTxt(
+            List<LinkedHashMap<String, Object>> registros) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         escreverBom(out);
+
         try (Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
             List<String> colunas = colunas(registros);
             writer.write(String.join("\t", colunas));
             writer.write("\r\n");
+
             for (Map<String, Object> registro : registros) {
                 for (int i = 0; i < colunas.size(); i++) {
                     if (i > 0) writer.write('\t');
-                    writer.write(texto(registro.get(colunas.get(i)))
-                        .replace('\t', ' ')
-                        .replace('\n', ' ')
-                        .replace('\r', ' '));
+                    writer.write(
+                        texto(registro.get(colunas.get(i)))
+                            .replace('\t', ' ')
+                            .replace('\n', ' ')
+                            .replace('\r', ' ')
+                    );
                 }
                 writer.write("\r\n");
             }
         }
+
         return out.toByteArray();
     }
 
-    private byte[] gerarXlsx(List<LinkedHashMap<String, Object>> registros) throws IOException {
+    private byte[] gerarXlsx(
+            List<LinkedHashMap<String, Object>> registros) throws IOException {
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100)) {
             workbook.setCompressTempFiles(true);
             Sheet sheet = workbook.createSheet("Relatório");
             sheet.createFreezePane(0, 1);
-            List<String> colunas = colunas(registros);
 
+            List<String> colunas = colunas(registros);
             CellStyle cabecalho = workbook.createCellStyle();
             Font fonte = workbook.createFont();
             fonte.setBold(true);
             cabecalho.setFont(fonte);
-            cabecalho.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            cabecalho.setFillForegroundColor(
+                IndexedColors.GREY_25_PERCENT.getIndex()
+            );
             cabecalho.setFillPattern(FillPatternType.SOLID_FOREGROUND);
 
             Row header = sheet.createRow(0);
@@ -178,19 +242,33 @@ public class ExportacaoRelatorioService {
                 Cell cell = header.createCell(i);
                 cell.setCellValue(colunas.get(i));
                 cell.setCellStyle(cabecalho);
-                sheet.setColumnWidth(i, Math.min(60, Math.max(12, colunas.get(i).length() + 3)) * 256);
+                sheet.setColumnWidth(
+                    i,
+                    Math.min(60, Math.max(12, colunas.get(i).length() + 3)) * 256
+                );
             }
 
             int indiceLinha = 1;
             for (Map<String, Object> registro : registros) {
                 Row row = sheet.createRow(indiceLinha++);
                 for (int i = 0; i < colunas.size(); i++) {
-                    preencherCelula(row.createCell(i), registro.get(colunas.get(i)));
+                    preencherCelula(
+                        row.createCell(i),
+                        registro.get(colunas.get(i))
+                    );
                 }
             }
-            sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(
-                0, Math.max(0, indiceLinha - 1), 0, Math.max(0, colunas.size() - 1)
-            ));
+
+            if (!colunas.isEmpty()) {
+                sheet.setAutoFilter(
+                    new org.apache.poi.ss.util.CellRangeAddress(
+                        0,
+                        Math.max(0, indiceLinha - 1),
+                        0,
+                        colunas.size() - 1
+                    )
+                );
+            }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -201,6 +279,7 @@ public class ExportacaoRelatorioService {
 
     private void preencherCelula(Cell cell, Object valor) {
         if (valor == null) return;
+
         if (valor instanceof Number numero) {
             cell.setCellValue(numero.doubleValue());
         } else if (valor instanceof Boolean booleano) {
@@ -210,8 +289,10 @@ public class ExportacaoRelatorioService {
         }
     }
 
-    private List<String> colunas(List<LinkedHashMap<String, Object>> registros) {
+    private List<String> colunas(
+            List<LinkedHashMap<String, Object>> registros) {
         if (registros.isEmpty()) return List.of();
+
         LinkedHashSet<String> colunas = new LinkedHashSet<>();
         registros.forEach(registro -> colunas.addAll(registro.keySet()));
         return new ArrayList<>(colunas);
