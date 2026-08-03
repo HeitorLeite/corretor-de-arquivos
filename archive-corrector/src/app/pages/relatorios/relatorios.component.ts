@@ -26,6 +26,14 @@ type ModoPaginaRelatorios = 'selecao' | 'manual' | 'automatico';
 
 type StatusArquivoSql = 'pendente' | 'criando' | 'sucesso' | 'erro';
 
+interface FiltroFixoSqlDetectado {
+  id: string;
+  assinatura: string;
+  predicadoOriginal: string;
+  marcador: string;
+  filtro: SguFiltro;
+}
+
 interface ArquivoSqlImportado {
   id: string;
   arquivoNome: string;
@@ -36,6 +44,8 @@ interface ArquivoSqlImportado {
   consultaSQL: string;
   ordenacao: string;
   filtros: SguFiltro[];
+  filtrosFixosDetectados: FiltroFixoSqlDetectado[];
+  filtrosFixosIgnorados: string[];
   ajustesAplicados: string[];
   detalhesAbertos: boolean;
   status: StatusArquivoSql;
@@ -544,8 +554,55 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     arquivo: ArquivoSqlImportado,
     indice: number
   ): void {
+    const filtroRemovido = arquivo.filtros[indice];
+    const deteccaoFixa = arquivo.filtrosFixosDetectados.find(
+      item => item.filtro === filtroRemovido
+    );
+
+    if (deteccaoFixa) {
+      const trechoAutomatico = `1 = 1 ${deteccaoFixa.marcador}`;
+
+      arquivo.consultaSQL = arquivo.consultaSQL.includes(trechoAutomatico)
+        ? arquivo.consultaSQL.replace(
+            trechoAutomatico,
+            deteccaoFixa.predicadoOriginal
+          )
+        : arquivo.consultaSQL.replace(
+            deteccaoFixa.marcador,
+            deteccaoFixa.predicadoOriginal
+          );
+
+      arquivo.filtrosFixosIgnorados = Array.from(
+        new Set([
+          ...arquivo.filtrosFixosIgnorados,
+          deteccaoFixa.assinatura,
+        ])
+      );
+      arquivo.filtrosFixosDetectados =
+        arquivo.filtrosFixosDetectados.filter(
+          item => item.id !== deteccaoFixa.id
+        );
+      arquivo.ajustesAplicados = [
+        ...arquivo.ajustesAplicados,
+        `O filtro ${filtroRemovido.nomeFiltro} foi removido; a condição original permaneceu fixa no SQL.`,
+      ];
+    }
+
     arquivo.filtros.splice(indice, 1);
     this.ajustarArquivoSql(arquivo);
+  }
+
+  descricaoFiltroAutomatico(
+    arquivo: ArquivoSqlImportado,
+    filtro: SguFiltro
+  ): string {
+    const deteccao = arquivo.filtrosFixosDetectados.find(
+      item => item.filtro === filtro
+    );
+
+    return deteccao
+      ? `Detectado de: ${deteccao.predicadoOriginal}. Se remover, esse valor continuará fixo no SQL.`
+      : '';
   }
 
   ajustarArquivoSql(arquivo: ArquivoSqlImportado): void {
@@ -569,6 +626,20 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       }
     }
 
+    const filtrosSimples = this.detectarFiltrosFixosSimples(
+      bindsNormalizados.sql,
+      nomesExistentes,
+      new Set(arquivo.filtrosFixosIgnorados)
+    );
+
+    for (const deteccao of filtrosSimples.deteccoes) {
+      arquivo.filtros.push(deteccao.filtro);
+      arquivo.filtrosFixosDetectados.push(deteccao);
+      nomesExistentes.add(
+        deteccao.filtro.nomeFiltro.trim().toLowerCase()
+      );
+    }
+
     /*
      * O SGU exige que o elemento filtros seja enviado mesmo quando a
      * consulta não possui filtros de negócio. Por isso sempre deixamos o
@@ -576,7 +647,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
      * opcional e invisível para o usuário quando necessário.
      */
     const resultado = this.ajustarEstruturaSqlImportado(
-      bindsNormalizados.sql,
+      filtrosSimples.sql,
       true
     );
 
@@ -585,6 +656,7 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
       new Set([
         ...arquivo.ajustesAplicados,
         ...parametrosConvertidos.ajustes,
+        ...filtrosSimples.ajustes,
         ...resultado.ajustes,
       ])
     );
@@ -1465,6 +1537,8 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
             consultaSQL: consultaSemPontoVirgula,
             ordenacao: '',
             filtros: [],
+            filtrosFixosDetectados: [],
+            filtrosFixosIgnorados: [],
             ajustesAplicados: [],
             detalhesAbertos: false,
             status: 'pendente',
@@ -1570,6 +1644,309 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
     }
 
     return 'VARCHAR(4000)';
+  }
+
+  private detectarFiltrosFixosSimples(
+    sqlOriginal: string,
+    nomesExistentes: Set<string>,
+    assinaturasIgnoradas: Set<string>
+  ): {
+    sql: string;
+    deteccoes: FiltroFixoSqlDetectado[];
+    ajustes: string[];
+  } {
+    let sql = sqlOriginal;
+    const deteccoes: FiltroFixoSqlDetectado[] = [];
+    const ajustes: string[] = [];
+    const sqlMascarado = this.mascaraSqlSemTextosEComentarios(sqlOriginal);
+    const estruturaPrincipal = this.localizarConsultaPrincipal(sqlOriginal);
+    const inicioWherePrincipal = estruturaPrincipal?.where?.fim ?? -1;
+    const fimWherePrincipal =
+      estruturaPrincipal?.limiteCondicoes ?? -1;
+    const candidatos: Array<{
+      inicio: number;
+      fim: number;
+      coluna: string;
+      operador: 'IN' | '=';
+      valores: string[];
+      predicadoOriginal: string;
+    }> = [];
+
+    const regexIn = /\b((?:[A-Za-z_][A-Za-z0-9_$#]*\.)?[A-Za-z_][A-Za-z0-9_$#]*)\s+IN\s*\(\s*(-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?)*)\s*\)/gi;
+    let correspondencia: RegExpExecArray | null;
+
+    while ((correspondencia = regexIn.exec(sqlMascarado)) !== null) {
+      candidatos.push({
+        inicio: correspondencia.index,
+        fim: correspondencia.index + correspondencia[0].length,
+        coluna: correspondencia[1],
+        operador: 'IN',
+        valores: correspondencia[2]
+          .split(',')
+          .map(valor => valor.trim()),
+        predicadoOriginal: sqlOriginal.slice(
+          correspondencia.index,
+          correspondencia.index + correspondencia[0].length
+        ),
+      });
+    }
+
+    const regexIgual = /\b((?:[A-Za-z_][A-Za-z0-9_$#]*\.)?[A-Za-z_][A-Za-z0-9_$#]*)\s*=\s*(-?\d+(?:\.\d+)?)/gi;
+
+    while ((correspondencia = regexIgual.exec(sqlMascarado)) !== null) {
+      const inicio = correspondencia.index;
+      const fim = correspondencia.index + correspondencia[0].length;
+
+      if (
+        candidatos.some(
+          candidato => inicio >= candidato.inicio && fim <= candidato.fim
+        )
+      ) {
+        continue;
+      }
+
+      candidatos.push({
+        inicio,
+        fim,
+        coluna: correspondencia[1],
+        operador: '=',
+        valores: [correspondencia[2].trim()],
+        predicadoOriginal: sqlOriginal.slice(inicio, fim),
+      });
+    }
+
+    const candidatosValidos = candidatos
+      .map(candidato => ({
+        ...candidato,
+        nomeFiltro: this.nomeFiltroPorColunaSql(candidato.coluna),
+      }))
+      .filter(
+        candidato =>
+          Boolean(candidato.nomeFiltro) &&
+          inicioWherePrincipal >= 0 &&
+          candidato.inicio >= inicioWherePrincipal &&
+          candidato.fim <= fimWherePrincipal &&
+          !nomesExistentes.has(candidato.nomeFiltro!)
+      )
+      .sort((a, b) => b.inicio - a.inicio);
+
+    for (const candidato of candidatosValidos) {
+      const nomeFiltro = candidato.nomeFiltro!;
+
+      if (nomesExistentes.has(nomeFiltro)) continue;
+
+      const assinatura = this.assinaturaFiltroFixo(
+        candidato.coluna,
+        candidato.operador,
+        candidato.valores
+      );
+
+      if (assinaturasIgnoradas.has(assinatura)) continue;
+
+      const id = this.gerarId();
+      const marcador = `/*AUTO_FILTRO_FIXO:${id}*/`;
+      const filtro = this.criarFiltroDeCondicaoFixa(
+        nomeFiltro,
+        candidato.coluna,
+        candidato.valores
+      );
+
+      sql =
+        sql.slice(0, candidato.inicio) +
+        `1 = 1 ${marcador}` +
+        sql.slice(candidato.fim);
+
+      const deteccao: FiltroFixoSqlDetectado = {
+        id,
+        assinatura,
+        predicadoOriginal: candidato.predicadoOriginal.trim(),
+        marcador,
+        filtro,
+      };
+
+      deteccoes.unshift(deteccao);
+      nomesExistentes.add(nomeFiltro);
+      ajustes.push(
+        `A condição fixa “${deteccao.predicadoOriginal}” foi transformada no filtro :${nomeFiltro}.`
+      );
+    }
+
+    return { sql, deteccoes, ajustes };
+  }
+
+  private nomeFiltroPorColunaSql(colunaCompleta: string): string | null {
+    const coluna = colunaCompleta
+      .split('.')
+      .pop()!
+      .toUpperCase();
+
+    if (coluna.includes('COMPET')) return 'competencia';
+
+    if (
+      coluna === 'GRUPO_COD' ||
+      coluna === 'COD_GRUPO' ||
+      coluna === 'GRPRE_COD' ||
+      coluna.endsWith('_COD_GRUPO')
+    ) {
+      return 'grupo';
+    }
+
+    if (
+      coluna === 'EMPCN_COD_PESSOA' ||
+      coluna === 'COD_EMPRESA' ||
+      coluna === 'EMPRESA_COD' ||
+      coluna === 'COD_PESSOA_EMPRESA'
+    ) {
+      return 'empresas';
+    }
+
+    if (
+      coluna === 'GUIA_COD_UNIMED_EXECUT' ||
+      coluna === 'COD_UNIMED_EXECUT' ||
+      coluna === 'UNIMED_EXECUTORA'
+    ) {
+      return 'unimedexecutora';
+    }
+
+    if (
+      coluna === 'ITEM_COD' ||
+      coluna === 'COD_TUSS' ||
+      coluna === 'COD_AMB' ||
+      coluna === 'COD_PROCEDIMENTO'
+    ) {
+      return 'itens';
+    }
+
+    return null;
+  }
+
+  private criarFiltroDeCondicaoFixa(
+    nomeFiltro: string,
+    coluna: string,
+    valores: string[]
+  ): SguFiltro {
+    const multiplosValores = valores.length > 1;
+    const filtroLista =
+      nomeFiltro === 'empresas' ||
+      nomeFiltro === 'itens' ||
+      multiplosValores;
+
+    if (filtroLista) {
+      return {
+        nomeFiltro,
+        conteudoFiltro:
+          `and instr(',' || replace(:${nomeFiltro}, ' ', '') || ',', ',' || to_char(${coluna}) || ',') > 0`,
+        tipoDadoFiltro:
+          nomeFiltro === 'itens' ? 'VARCHAR(4000)' : 'VARCHAR(1000)',
+        mascaraFiltro: '',
+        obrigatorioFiltro: 'S',
+      };
+    }
+
+    return {
+      nomeFiltro,
+      conteudoFiltro: `and ${coluna} = :${nomeFiltro}`,
+      tipoDadoFiltro: 'NUMBER',
+      mascaraFiltro: '',
+      obrigatorioFiltro: 'S',
+    };
+  }
+
+  private assinaturaFiltroFixo(
+    coluna: string,
+    operador: string,
+    valores: string[]
+  ): string {
+    return `${coluna.toUpperCase()}|${operador.toUpperCase()}|${valores.join(',')}`;
+  }
+
+  private mascaraSqlSemTextosEComentarios(sql: string): string {
+    let resultado = '';
+    let indice = 0;
+    let estado:
+      | 'normal'
+      | 'texto'
+      | 'identificador'
+      | 'linha'
+      | 'bloco' = 'normal';
+
+    while (indice < sql.length) {
+      const atual = sql[indice];
+      const proximo = sql[indice + 1] ?? '';
+
+      if (estado === 'texto') {
+        if (atual === "'" && proximo === "'") {
+          resultado += '  ';
+          indice += 2;
+          continue;
+        }
+
+        resultado += atual === '\n' ? '\n' : ' ';
+        if (atual === "'") estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'identificador') {
+        resultado += atual === '\n' ? '\n' : ' ';
+        if (atual === '"') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'linha') {
+        resultado += atual === '\n' ? '\n' : ' ';
+        if (atual === '\n') estado = 'normal';
+        indice += 1;
+        continue;
+      }
+
+      if (estado === 'bloco') {
+        if (atual === '*' && proximo === '/') {
+          resultado += '  ';
+          indice += 2;
+          estado = 'normal';
+          continue;
+        }
+
+        resultado += atual === '\n' ? '\n' : ' ';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === "'") {
+        resultado += ' ';
+        estado = 'texto';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '"') {
+        resultado += ' ';
+        estado = 'identificador';
+        indice += 1;
+        continue;
+      }
+
+      if (atual === '-' && proximo === '-') {
+        resultado += '  ';
+        indice += 2;
+        estado = 'linha';
+        continue;
+      }
+
+      if (atual === '/' && proximo === '*') {
+        resultado += '  ';
+        indice += 2;
+        estado = 'bloco';
+        continue;
+      }
+
+      resultado += atual;
+      indice += 1;
+    }
+
+    return resultado;
   }
 
   private converterParametrosFixosSql(sqlOriginal: string): {
@@ -2136,7 +2513,6 @@ export class RelatoriosComponent implements OnInit, OnDestroy {
   private normalizarFiltros(filtros: SguFiltro[]): SguFiltro[] {
     return (filtros ?? [])
       .map((filtro): SguFiltro => ({
-        ...filtro,
         nomeFiltro: filtro.nomeFiltro.trim(),
         conteudoFiltro: filtro.conteudoFiltro.trim(),
         tipoDadoFiltro: filtro.tipoDadoFiltro.trim().toUpperCase(),

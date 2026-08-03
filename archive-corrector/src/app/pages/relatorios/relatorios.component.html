@@ -707,6 +707,9 @@
                       [class.input-invalid]="!!erroVariavelFiltro(filtro)"
                     />
                     <small class="field-error" *ngIf="erroVariavelFiltro(filtro) as erroBindArquivo">{{ erroBindArquivo }}</small>
+                    <small *ngIf="descricaoFiltroAutomatico(arquivo, filtro) as descricaoAutomatica">
+                      {{ descricaoAutomatica }}
+                    </small>
                   </div>
 
                   <div class="field">
